@@ -41,50 +41,48 @@
 
         // LISTA DE COLORES ACTUALIZADA Y EXPANDIDA
         const COLORES_PREDEFINIDOS = [
-            "negro nubuk", "cafe / camel", "vino camel", "negro camel", "tan / jeans", "came / jeans", 
-            "lona negro", "negro cromado", "blanco plata", "blanco celeste", "blanco rosado", "azul claro", 
-            "negro / plata", "negro / dorado", "blanco / dorado", "verde olivo", "verde manzana", "palo rosa", 
-            "amarillo claro", "verde lima", "verde muzgo", "gris oscuro", "blanco azul", "azul marino",
-            "negro", "cafe", "café", "camel", "marino", "azul", "rojo", "blanco", "gris", "plata", "oro", 
-            "miel", "beige", "vino", "mostaza", "verde", "rosa", "fuchsia", "fuscia", "fucsia", "morado", 
-            "lila", "amarillo", "naranja", "celeste", "turquesa", "turqueza", "hueso", "arena", "taupe", 
-            "cobre", "bronce", "plomo", "transparente", "multicolor", "estampado", "leopardo", "charol", 
-            "gamuza", "lona", "rosado", "tan", "marron", "marrón", "mentol purificante", "hongo", "cristal", 
-            "dorado", "champagne", "gena", "vainilla", "corinto", "musgo", "nuez", "perla", "kaki", "caqui", 
-            "natural", "crema", "aqua", "trigo", "floral", "salmon", "salmón", "pistacho", "curry", "coral", 
-            "chocolate", "ladrillo", "marfil", "melon", "melón", "acero", "cognac", "uva", "purpura", "púrpura", 
+            "negro nubuk", "cafe camel", "vino camel", "negro camel", "tan jeans", "came jeans",
+            "lona negro", "negro cromado", "blanco plata", "blanco celeste", "blanco rosado", "azul claro",
+            "negro plata", "negro dorado", "blanco dorado", "verde olivo", "verde manzana", "palo rosa",
+            "amarillo claro", "verde lima", "verde musgo", "gris oscuro", "blanco azul", "azul marino",
+            "negro", "cafe", "camel", "marino", "azul", "rojo", "blanco", "gris", "plata", "oro",
+            "miel", "beige", "vino", "mostaza", "verde", "rosa", "fuchsia", "fuscia", "fucsia", "morado",
+            "lila", "amarillo", "naranja", "celeste", "turquesa", "turqueza", "hueso", "arena", "taupe",
+            "cobre", "bronce", "plomo", "transparente", "multicolor", "estampado", "leopardo", "charol",
+            "gamuza", "lona", "rosado", "tan", "marron", "mentol purificante", "hongo", "cristal",
+            "dorado", "champagne", "gena", "vainilla", "corinto", "musgo", "nuez", "perla", "kaki", "caqui",
+            "natural", "crema", "aqua", "trigo", "floral", "salmon", "pistacho", "curry", "coral",
+            "chocolate", "ladrillo", "marfil", "melon", "acero", "cognac", "uva", "purpura",
             "tabaco", "cocoa", "pera", "exotic", "manzanilla", "aloe"
         ];
 
-        const escapeRegExp = (string) => {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        };
+        const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         const normalizarTexto = (texto) => {
             if (!texto) return "";
             let t = String(texto).toLowerCase();
-            t = t.replace(/[\-\:\,]/g, ' ');          
+            // Quitar tildes para comparación robusta (café == cafe, etc.)
+            t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            // Normalizar separadores de colores compuestos a espacio simple
+            t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
             t = t.replace(/\bal\b/g, ' ');
             t = t.replace(/\by\b/g, ' ');
+            t = t.replace(/,/g, ' ');
             t = t.replace(/\s+/g, ' ').trim();
             return t;
         };
 
         const extraerTextoPdf = async (file) => {
             const buffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({data: new Uint8Array(buffer)}).promise;
+            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
             let textoCompleto = "";
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                
                 let pageText = "";
                 let lastY = -1;
-                
                 for (let item of textContent.items) {
-                    if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 2) {
-                        pageText += "\n";
-                    }
+                    if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 2) pageText += "\n";
                     pageText += item.str;
                     lastY = item.transform[5];
                 }
@@ -95,28 +93,24 @@
 
         const obtenerPatronColores = () => {
             let colorList = [...COLORES_PREDEFINIDOS];
-            colorList.sort((a, b) => b.length - a.length); 
-
-            let patrones = [];
-            colorList.forEach(c => {
-                let escaped = escapeRegExp(c.trim().toLowerCase());
-                patrones.push(`(?:\\b\\d{1,3}\\s+)?\\b${escaped}\\b`);
+            colorList.sort((a, b) => b.length - a.length);
+            let patrones = colorList.map(c => {
+                let norm = normalizarTexto(c);
+                return `(?:\\b\\d{1,3}\\s+)?\\b${escapeRegExp(norm)}\\b`;
             });
             return patrones.length > 0 ? patrones.join('|') : "";
         };
 
         const distanciaLevenshtein = (a, b) => {
-            if(a.length == 0) return b.length; 
-            if(b.length == 0) return a.length; 
-            var matrix = [];
-            for(var i = 0; i <= b.length; i++) matrix[i] = [i];
-            for(var j = 0; j <= a.length; j++) matrix[0][j] = j;
-            for(var i = 1; i <= b.length; i++){
-                for(var j = 1; j <= a.length; j++){
-                    if(b.charAt(i-1) == a.charAt(j-1)) matrix[i][j] = matrix[i-1][j-1];
-                    else matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, Math.min(matrix[i][j-1] + 1, matrix[i-1][j] + 1));
-                }
-            }
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = Array.from({ length: b.length + 1 }, (_, i) => [i]);
+            for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+            for (let i = 1; i <= b.length; i++)
+                for (let j = 1; j <= a.length; j++)
+                    matrix[i][j] = b[i-1] === a[j-1]
+                        ? matrix[i-1][j-1]
+                        : Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
             return matrix[b.length][a.length];
         };
 
@@ -220,8 +214,7 @@
                     addLog("⚙️ Cargando algoritmos de validación...");
                     
                     let patronColores = obtenerPatronColores();
-                    
-                    let patronDinamico = `\\b\\d{1,3}\\s+(?!al\\b|y\\b)[a-záéíóúñ]+(?:\\s+(?!al\\b|y\\b)[a-záéíóúñ]+)?\\b`;
+                    let patronDinamico = `\\b\\d{1,3}\\s+(?!al\\b|y\\b)[a-z]+(?:\\s+(?!al\\b|y\\b)[a-z]+)?\\b`;
                     let patronFinalCombinado = patronColores ? `(?:${patronDinamico}|${patronColores})` : patronDinamico;
                     
                     addLog("⏳ Pre-procesando PDFs...");
@@ -278,10 +271,10 @@
                                     let idxCodigo = textoPdf.indexOf(codigoNorm);
                                     let cambiosLower = cambiosCelda.toLowerCase();
 
-                                    let rowString = codigo + "|" + cambiosCelda;
+                                    let rowKey = codigoNorm + "|" + normalizarTexto(cambiosCelda);
                                     let enTodasLasSecciones = cambiosLower.includes('en todas las secciones');
 
-                                    if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowString)) {
+                                    if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
                                         continue; 
                                     }
 
@@ -303,11 +296,10 @@
                                             }
                                             if (!encontradoEnOtro) {
                                                 codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
-                                            } else if (enTodasLasSecciones) {
-                                                erroresEncontrados.push(`${codigo} -> No se encontró el código en este PDF (se pidió validarlo en todas las secciones)`);
                                             }
                                         }
-                                        if (count > 0 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        
+                                        if (count > 0 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
                                         continue;
                                     }
 
@@ -316,19 +308,19 @@
                                     }
 
                                     let textoLimpioEliminacion = cambiosLower.replace(/[\s,.]+/g, ' ').trim();
-                                    const esEliminacion = /^(fuera fuera|no hay nada|fuera|ofertas|eliminar|borrar|quitar)$/i.test(textoLimpioEliminacion) || 
+                                    const esEliminacion = /^\s*(fuera fuera|no hay nada|fuera|ofertas|eliminar|borrar|quitar)\s*$/i.test(textoLimpioEliminacion) || 
                                                           /eliminar\s*(c[oó]digo|todo|modelo)/i.test(cambiosLower) || 
                                                           /borrar\s*(c[oó]digo|todo|modelo)/i.test(cambiosLower);
                                                           
                                     if (esEliminacion) {
                                         if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} -> Se pidió eliminar todo (o es OFERTA) pero el código AÚN está en el PDF`);
-                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        if (idxCodigo !== -1 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
                                         continue;
                                     }
 
                                     if (cambiosLower.includes('dummy')) {
                                         if (idxCodigo === -1) erroresEncontrados.push(`${codigo} -> Dice 'Info en dummy' pero el código NO está en el PDF`);
-                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        if (idxCodigo !== -1 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
                                         continue;
                                     }
 
@@ -354,10 +346,12 @@
                                         else if (!encontradoEnDestino) erroresEncontrados.push(`${codigo} -> Se solicitó pasar a '${seccionDestino}' pero NO se encontró en ${seccionDestino}`);
                                         else if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} -> Se pasó a '${seccionDestino}' pero el código AÚN está en este PDF`);
                                         
-                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
-                                        if (cambiosCelda.trim().toLowerCase() === matchPasarA[0]) continue;
+                                        if (idxCodigo !== -1 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
+                                        
+                                        if (cambiosCelda.trim().toLowerCase().match(/^(?:pasar a|mover a|cambiar a|dejar(?:\s+solo)?\s+en\s+secci[oó]n)\s+[a-záéíóúñ]+$/i)) continue;
                                     }
 
+                                    // --- LÓGICA NO ENCONTRADO ---
                                     if (idxCodigo === -1) {
                                         let encontradoEnOtroLado = false;
                                         for (const otroPdf of pdfsData) {
@@ -369,15 +363,14 @@
                                         if (!matchPasarA) {
                                             if (!encontradoEnOtroLado) {
                                                 codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
-                                            } else if (enTodasLasSecciones) {
-                                                erroresEncontrados.push(`${codigo} -> El código no aparece en este PDF (se pidió validarlo en todas las secciones)`);
                                             }
                                         }
                                         continue;
                                     }
 
+                                    // --- SI LLEGAMOS AQUÍ, EL CÓDIGO SÍ SE ENCONTRÓ EN ESTE PDF ---
                                     if (!enTodasLasSecciones) {
-                                        codigosProcesadosGlobal.add(rowString);
+                                        codigosProcesadosGlobal.add(rowKey);
                                     }
 
                                     let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
@@ -397,7 +390,7 @@
 
                                     let preciosAdl = [...cambiosCelda.matchAll(/(?:q\.?\s*)(\d+)/gi)].map(m => m[1]);
                                     for (let precio of preciosAdl) {
-                                        let regexPrecio = new RegExp(`q\\.?\\s*${precio}\\b`, 'i');
+                                        let regexPrecio = new RegExp(`\\bq\\.?\\s*${precio}\\b`, 'i');
                                         if (!regexPrecio.test(bloquePdf)) erroresEncontrados.push(`${codigo} -> Precio no cuadra: Q.${precio}`);
                                     }
 
@@ -421,7 +414,8 @@
                                         if (/\bfuera\b/i.test(lineaNorm)) {
                                             let lineaSinFuera = lineaNorm.replace(/\bfuera\b/ig, '').trim();
                                             if (lineaSinFuera) {
-                                                let regexBuscarFuera = new RegExp(escapeRegExp(lineaSinFuera).replace(/[\s\/,\-]+/g, '[\\s\\/\\,\\-]+'), 'i');
+                                                let lineaSinFueraEscaped = escapeRegExp(lineaSinFuera);
+                                                let regexBuscarFuera = new RegExp(lineaSinFueraEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+'), 'i');
                                                 if (regexBuscarFuera.test(bloquePdf)) {
                                                     erroresEncontrados.push(`${codigo} -> Se pidió eliminar '${lineaSinFuera}' pero AÚN aparece en el PDF`);
                                                 }
@@ -434,7 +428,8 @@
 
                                         let matchNumColor = lineaNorm.match(/^(\d{1,3})\s+(.+)/);
                                         let restoLinea = matchNumColor ? matchNumColor[2] : lineaNorm;
-                                        restoLinea = escapeRegExp(restoLinea);
+                                        
+                                        let restoLineaEscaped = escapeRegExp(restoLinea);
 
                                         let encontradoEnPdf = false;
                                         
@@ -443,7 +438,7 @@
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
 
-                                        let regexBuscarEnPdf = new RegExp(`(?:\\d{1,3}\\s+)?${restoLinea}`, 'i');
+                                        let regexBuscarEnPdf = new RegExp(`(?:\\d{1,3}\\s+)?${restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\-]+')}`, 'i');
                                         
                                         if (regexBuscarEnPdf.test(bloquePdfParaBusqueda)) {
                                             encontradoEnPdf = true;
