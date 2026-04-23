@@ -21,48 +21,55 @@
             padding: 0;
             color: #111111;
         }
- 
+
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #E2E8F0; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #CBD5E1; }
- 
+
         .neon-accent { background-color: #D4FF26; }
         .card-shadow { box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.03); }
     </style>
 </head>
 <body>
     <div id="root"></div>
- 
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
- 
+
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
- 
+
+        // LISTA DE COLORES ACTUALIZADA Y EXPANDIDA
         const COLORES_PREDEFINIDOS = [
-            "01 Negro", "02 Cafe", "03 Camel", "04 Marino", "05 Azul",
-            "06 Rojo", "07 Blanco", "08 Gris", "09 Plata", "10 Oro",
-            "11 Miel", "12 Beige", "13 Vino", "14 Mostaza", "15 Verde",
-            "16 Rosa", "17 Fuchsia", "18 Morado", "19 Lila", "20 Amarillo",
-            "21 Naranja", "22 Celeste", "23 Turquesa", "24 Hueso", "25 Arena",
-            "26 Taupe", "27 Cobre", "28 Bronce", "29 Plomo", "30 Transparente",
-            "31 Multicolor", "32 Estampado", "33 Leopardo", "34 Charol", "35 Gamuza",
-            "36 Lona", "37 Rosado"
+            "negro nubuk", "cafe / camel", "vino camel", "negro camel", "tan / jeans", "came / jeans", 
+            "lona negro", "negro cromado", "blanco plata", "blanco celeste", "blanco rosado", "azul claro", 
+            "negro / plata", "negro / dorado", "blanco / dorado", "verde olivo", "verde manzana", "palo rosa", 
+            "amarillo claro", "verde lima", "verde muzgo", "gris oscuro", "blanco azul", "azul marino",
+            "negro", "cafe", "café", "camel", "marino", "azul", "rojo", "blanco", "gris", "plata", "oro", 
+            "miel", "beige", "vino", "mostaza", "verde", "rosa", "fuchsia", "fuscia", "fucsia", "morado", 
+            "lila", "amarillo", "naranja", "celeste", "turquesa", "turqueza", "hueso", "arena", "taupe", 
+            "cobre", "bronce", "plomo", "transparente", "multicolor", "estampado", "leopardo", "charol", 
+            "gamuza", "lona", "rosado", "tan", "marron", "marrón", "mentol purificante", "hongo", "cristal", 
+            "dorado", "champagne", "gena", "vainilla", "corinto", "musgo", "nuez", "perla", "kaki", "caqui", 
+            "natural", "crema", "aqua", "trigo", "floral", "salmon", "salmón", "pistacho", "curry", "coral", 
+            "chocolate", "ladrillo", "marfil", "melon", "melón", "acero", "cognac", "uva", "purpura", "púrpura", 
+            "tabaco", "cocoa", "pera", "exotic", "manzanilla", "aloe"
         ];
- 
-        // FIX: normalizarTexto ya no reemplaza '/' para no romper codigos con slash
+
+        const escapeRegExp = (string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         const normalizarTexto = (texto) => {
             if (!texto) return "";
             let t = String(texto).toLowerCase();
-            t = t.replace(/[\-\:]/g, ' ');          // quitamos '/' de aqui
+            t = t.replace(/[\-\:\,]/g, ' ');          
             t = t.replace(/\bal\b/g, ' ');
-            t = t.replace(/\by\b/g, ',');
-            t = t.replace(/\s*,\s*/g, ',');
+            t = t.replace(/\by\b/g, ' ');
             t = t.replace(/\s+/g, ' ').trim();
             return t;
         };
- 
-        // FIX: extraerTextoPdf ahora cacheable — retorna objeto con crudo y normalizado
+
         const extraerTextoPdf = async (file) => {
             const buffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data: new Uint8Array(buffer)}).promise;
@@ -85,27 +92,19 @@
             }
             return { crudo: textoCompleto, normalizado: normalizarTexto(textoCompleto) };
         };
- 
+
         const obtenerPatronColores = () => {
             let colorList = [...COLORES_PREDEFINIDOS];
-            colorList.sort((a, b) => b.length - a.length);
- 
+            colorList.sort((a, b) => b.length - a.length); 
+
             let patrones = [];
             colorList.forEach(c => {
-                let cNorm = c.trim().toLowerCase();
-                let match = cNorm.match(/^(\d+)\s+(.+)$/);
-                if (match) {
-                    let num = match[1];
-                    let nombre = match[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
-                    patrones.push(`\\b0*${num}\\s+${nombre}\\b`);
-                } else {
-                    let escaped = cNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    patrones.push(`\\b${escaped}\\b`);
-                }
+                let escaped = escapeRegExp(c.trim().toLowerCase());
+                patrones.push(`(?:\\b\\d{1,3}\\s+)?\\b${escaped}\\b`);
             });
             return patrones.length > 0 ? patrones.join('|') : "";
         };
- 
+
         const distanciaLevenshtein = (a, b) => {
             if(a.length == 0) return b.length; 
             if(b.length == 0) return a.length; 
@@ -120,27 +119,25 @@
             }
             return matrix[b.length][a.length];
         };
- 
-        // FIX: leerArchivosCambios ahora maneja CSV correctamente con detección de tipo
+
         const leerArchivosCambios = async (archivosFiles, pdfName) => {
             let dfList = [];
             let pdfNameClean = pdfName.toLowerCase().replace('.pdf', '').replace(/^\d+\s*/, ''); 
             const palabrasClavePdf = pdfNameClean.split(/\s+/).filter(w => w.length > 2);
- 
+
             for (const file of archivosFiles) {
                 const buffer = await file.arrayBuffer();
-                // FIX: detección correcta de tipo de archivo para XLSX vs CSV
                 const esCSV = file.name.toLowerCase().endsWith('.csv');
                 const workbook = esCSV
                     ? XLSX.read(new Uint8Array(buffer), {type: 'array', raw: true})
                     : XLSX.read(new Uint8Array(buffer), {type: 'array'});
- 
+
                 let sheetFound = false;
                 
                 for (const sheet of workbook.SheetNames) {
                     let sheetClean = sheet.toLowerCase().trim();
                     let matchEncontrado = false;
- 
+
                     for (const palabra of palabrasClavePdf) {
                         if (sheetClean.includes(palabra) || palabra.includes(sheetClean)) {
                             matchEncontrado = true; break;
@@ -150,14 +147,14 @@
                             matchEncontrado = true; break;
                         }
                     }
- 
+
                     if (matchEncontrado) {
                         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet], {header: 1, defval: ""});
                         if(rows.length > 0) dfList.push(rows);
                         sheetFound = true;
                     }
                 }
- 
+
                 if (!sheetFound) {
                     let fileNameClean = file.name.toLowerCase().replace('.csv', '').replace('.xlsx', '').trim();
                     let matchEncontrado = false;
@@ -170,9 +167,8 @@
                             matchEncontrado = true; break;
                         }
                     }
- 
+
                     if (matchEncontrado) {
-                        // FIX: defval: "" para evitar celdas undefined que causaban errores silenciosos
                         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
                         if(rows.length > 0) dfList.push(rows);
                     }
@@ -180,19 +176,19 @@
             }
             return dfList;
         };
- 
+
         const App = () => {
             const [pdfsData, setPdfsData] = useState([]);
             const [changesData, setChangesData] = useState([]);
             const [isProcessing, setIsProcessing] = useState(false);
             const [logs, setLogs] = useState([]);
             const [report, setReport] = useState(null);
- 
+
             const fileInputPdfRef = useRef(null);
             const fileInputChangesRef = useRef(null);
- 
+
             const addLog = (msg) => setLogs(prev => [...prev, msg]);
- 
+
             const handlePdfUpload = (e) => {
                 const files = Array.from(e.target.files);
                 if (files.length === 0) return;
@@ -200,7 +196,7 @@
                 addLog(`📄 ${files.length} PDF(s) preparado(s).`);
                 e.target.value = null; 
             };
- 
+
             const handleChangesUpload = (e) => {
                 const files = Array.from(e.target.files);
                 if (files.length === 0) return;
@@ -208,26 +204,26 @@
                 addLog(`📊 ${files.length} archivo(s) de cambios preparado(s).`);
                 e.target.value = null; 
             };
- 
+
             const removePdf = (index) => setPdfsData(prev => prev.filter((_, i) => i !== index));
             const removeChangeFile = (index) => setChangesData(prev => prev.filter((_, i) => i !== index));
- 
+
             const handleAudit = async () => {
                 if (pdfsData.length === 0 || changesData.length === 0) {
                     alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV con los cambios.");
                     return;
                 }
- 
+
                 setIsProcessing(true); setLogs([]); setReport(null);
                 
                 try {
                     addLog("⚙️ Cargando algoritmos de validación...");
+                    
                     let patronColores = obtenerPatronColores();
                     
                     let patronDinamico = `\\b\\d{1,3}\\s+(?!al\\b|y\\b)[a-záéíóúñ]+(?:\\s+(?!al\\b|y\\b)[a-záéíóúñ]+)?\\b`;
                     let patronFinalCombinado = patronColores ? `(?:${patronDinamico}|${patronColores})` : patronDinamico;
                     
-                    // FIX PRINCIPAL: pre-cachear todos los PDFs para no re-parsearlos en cada iteración
                     addLog("⏳ Pre-procesando PDFs...");
                     const pdfCache = new Map();
                     for (const pdfFile of pdfsData) {
@@ -238,138 +234,215 @@
                             pdfCache.set(pdfFile.name, { crudo: "", normalizado: "" });
                         }
                     }
- 
+
                     let globalReport = [];
                     let totalAlerts = 0;
- 
+                    
+                    const codigosProcesadosGlobal = new Set();
+                    const codigosCompletamenteNoEncontrados = new Set();
+
                     for (const pdfFile of pdfsData) {
                         addLog(`🔍 Analizando: ${pdfFile.name}...`);
-                        // Usar caché en vez de re-parsear
                         const dataExtraida = pdfCache.get(pdfFile.name);
                         const textoPdf = dataExtraida.normalizado;
- 
+
                         const dfList = await leerArchivosCambios(changesData, pdfFile.name);
                         
                         if (dfList.length === 0) {
-                            globalReport.push(`\n[ ${pdfFile.name} ]\n⚠️ No se encontraron datos para este catálogo en los Excels subidos.`);
+                            globalReport.push(`\n[ ${pdfFile.name} ]\nNo se encontraron datos para este catálogo en los Excels subidos.`);
                             continue;
                         }
- 
+
                         let erroresEncontrados = [];
- 
+
                         for (const rows of dfList) {
                             for (let r = 1; r < rows.length; r++) {
                                 const row = rows[r];
                                 if (!row || row.length === 0) continue;
                                 
-                                let codigo = String(row[0] || "").trim();
-                                if (!codigo || codigo.toLowerCase() === 'nan' || codigo.toLowerCase() === 'codigo') continue;
- 
-                                let cambiosCelda = "";
-                                for (let i = 1; i < row.length; i++) {
-                                    let celda = String(row[i] || "").trim();
-                                    if (celda && celda.toLowerCase() !== 'nan') cambiosCelda += celda + "\n";
-                                }
-                                cambiosCelda = cambiosCelda.trim();
-                                
-                                let codigoNorm = normalizarTexto(codigo);
-                                let idxCodigo = textoPdf.indexOf(codigoNorm);
-                                let cambiosLower = cambiosCelda.toLowerCase();
- 
-                                const esEliminacion = cambiosLower.includes('fuera') || cambiosLower.includes('eliminar') || cambiosLower.includes('borrar') || cambiosLower.includes('quitar');
-                                if (esEliminacion) {
-                                    if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} - ❌ Revisar: Se pidió eliminar pero el código AÚN está en el PDF`);
-                                    continue;
-                                }
-                                if (cambiosLower.includes('dummy')) {
-                                    if (idxCodigo === -1) erroresEncontrados.push(`${codigo} - ❌ Revisar: Dice 'Info en dummy' pero el código NO está en el PDF`);
-                                    continue;
-                                }
- 
-                                const regexPasarA = /(?:pasar a|mover a|cambiar a)\s+([a-záéíóúñ]+)/i;
-                                const matchPasarA = cambiosLower.match(regexPasarA);
-                                
-                                if (matchPasarA) {
-                                    const seccionDestino = matchPasarA[1].trim();
-                                    let encontradoEnDestino = false;
-                                    let pdfDestinoSubido = false;
+                                let codigoCelda = String(row[0] || "").trim();
+                                if (!codigoCelda || codigoCelda.toLowerCase() === 'nan' || codigoCelda.toLowerCase() === 'codigo') continue;
+
+                                let codigosSeparados = codigoCelda.split(/[\/\\]+/).map(c => c.trim()).filter(c => c);
+
+                                for (let codigo of codigosSeparados) {
+                                    let cambiosCelda = "";
+                                    for (let i = 1; i < row.length; i++) {
+                                        let celda = String(row[i] || "").trim();
+                                        if (celda && celda.toLowerCase() !== 'nan') cambiosCelda += celda + "\n";
+                                    }
+                                    cambiosCelda = cambiosCelda.trim();
                                     
-                                    for (const otroPdf of pdfsData) {
-                                        const nombreOtroPdf = otroPdf.name.toLowerCase();
-                                        if (nombreOtroPdf.includes(seccionDestino)) {
-                                            pdfDestinoSubido = true;
-                                            // FIX: usar caché en vez de re-parsear
-                                            const datosOtroPdf = pdfCache.get(otroPdf.name);
-                                            if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) {
-                                                encontradoEnDestino = true; break;
+                                    let codigoNorm = normalizarTexto(codigo);
+                                    if (!codigoNorm) continue;
+                                    let idxCodigo = textoPdf.indexOf(codigoNorm);
+                                    let cambiosLower = cambiosCelda.toLowerCase();
+
+                                    let rowString = codigo + "|" + cambiosCelda;
+                                    let enTodasLasSecciones = cambiosLower.includes('en todas las secciones');
+
+                                    if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowString)) {
+                                        continue; 
+                                    }
+
+                                    if (cambiosLower.includes('duplicado')) {
+                                        let count = 0;
+                                        let pos = textoPdf.indexOf(codigoNorm);
+                                        while (pos !== -1) {
+                                            count++;
+                                            pos = textoPdf.indexOf(codigoNorm, pos + 1);
+                                        }
+                                        if (count > 1) {
+                                            erroresEncontrados.push(`${codigo} -> Se detectó DUPLICADO en el PDF (aparece ${count} veces)`);
+                                        } else if (count === 0) {
+                                            let encontradoEnOtro = false;
+                                            for (const otroPdf of pdfsData) {
+                                                if (otroPdf.name === pdfFile.name) continue;
+                                                const datosOtroPdf = pdfCache.get(otroPdf.name);
+                                                if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnOtro = true; break; }
+                                            }
+                                            if (!encontradoEnOtro) {
+                                                codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
+                                            } else if (enTodasLasSecciones) {
+                                                erroresEncontrados.push(`${codigo} -> No se encontró el código en este PDF (se pidió validarlo en todas las secciones)`);
                                             }
                                         }
+                                        if (count > 0 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        continue;
                                     }
-                                    
-                                    if (!pdfDestinoSubido) erroresEncontrados.push(`${codigo} - ❌ No se pudo validar si se paso a ${seccionDestino} porque no se detecto el pdf de ${seccionDestino}`);
-                                    else if (!encontradoEnDestino) erroresEncontrados.push(`${codigo} - ❌ Revisar: Se solicitó pasar a '${seccionDestino}' pero NO se encontró en ${seccionDestino}`);
-                                    else if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} - ❌ Revisar: Se pasó a '${seccionDestino}' pero el código AÚN está en este PDF`);
-                                    
-                                    if (cambiosCelda.trim().toLowerCase() === matchPasarA[0]) continue;
-                                }
- 
-                                if (idxCodigo === -1) {
-                                    let encontradoEnOtroLado = false;
-                                    for (const otroPdf of pdfsData) {
-                                        if (otroPdf.name === pdfFile.name) continue;
-                                        // FIX: usar caché en vez de re-parsear
-                                        const datosOtroPdf = pdfCache.get(otroPdf.name);
-                                        if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnOtroLado = true; break; }
+
+                                    if (/foto|arreglar|imagen|quitar foto/i.test(cambiosLower)) {
+                                        erroresEncontrados.push(`${codigo} -> Instrucción de diseño (Revisión manual): "${cambiosCelda.replace(/\n/g, ' ')}"`);
                                     }
-                                    if (!encontradoEnOtroLado && !matchPasarA) erroresEncontrados.push(`${codigo} - ❌ No se encontro el codigo en ningun PDF`);
-                                    else if (!matchPasarA) erroresEncontrados.push(`${codigo} - ❌ El código no aparece en este PDF`);
-                                    continue;
-                                }
- 
-                                let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
-                                let matchNextCode = restoPdf.match(/\b[a-z]{2,3}\d{4,5}\b/i);
-                                // FIX: blockSize aumentado a 300 (era 150, muy pequeño para productos con muchos colores)
-                                let blockSize = 300; 
-                                if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 400) {
-                                    blockSize = codigoNorm.length + matchNextCode.index;
-                                }
-                                let bloquePdf = textoPdf.substring(idxCodigo, idxCodigo + blockSize);
- 
-                                let preciosAdl = [...cambiosCelda.matchAll(/(?:q\.?\s*)(\d+)/gi)].map(m => m[1]);
-                                for (let precio of preciosAdl) {
-                                    let regexPrecio = new RegExp(`q\\.?\\s*${precio}\\b`, 'i');
-                                    if (!regexPrecio.test(bloquePdf)) erroresEncontrados.push(`${codigo} - ❌ Precio no cuadra: Q.${precio}`);
-                                }
- 
-                                let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
-                                
-                                cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(?:agregar|añadir|poner|incluir)\b/gi, '').trim();
-                                cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(\d+)([a-zA-ZñÑáéíóúÁÉÍÓÚ]+)/g, '$1 $2');
- 
-                                let regexColoresSplit = new RegExp(`(${patronFinalCombinado})`, 'gi');
-                                cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(regexColoresSplit, '\n$1');
- 
-                                let lineasCambio = cambiosCeldaSinPrecio.split('\n');
-                                let lineasFaltantes = [];
- 
-                                for (let linea of lineasCambio) {
-                                    let lineaNorm = normalizarTexto(linea);
-                                    if (!lineaNorm) continue;
- 
-                                    let regexSoloColor = new RegExp(`^(${patronFinalCombinado})$`, 'i');
-                                    let esSoloColor = regexSoloColor.test(lineaNorm);
- 
-                                    let matchNumColor = lineaNorm.match(/^(\d{1,3})\s+(.+)/);
-                                    let encontradoEnPdf = false;
+
+                                    let textoLimpioEliminacion = cambiosLower.replace(/[\s,.]+/g, ' ').trim();
+                                    const esEliminacion = /^(fuera fuera|no hay nada|fuera|ofertas|eliminar|borrar|quitar)$/i.test(textoLimpioEliminacion) || 
+                                                          /eliminar\s*(c[oó]digo|todo|modelo)/i.test(cambiosLower) || 
+                                                          /borrar\s*(c[oó]digo|todo|modelo)/i.test(cambiosLower);
+                                                          
+                                    if (esEliminacion) {
+                                        if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} -> Se pidió eliminar todo (o es OFERTA) pero el código AÚN está en el PDF`);
+                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        continue;
+                                    }
+
+                                    if (cambiosLower.includes('dummy')) {
+                                        if (idxCodigo === -1) erroresEncontrados.push(`${codigo} -> Dice 'Info en dummy' pero el código NO está en el PDF`);
+                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        continue;
+                                    }
+
+                                    const regexPasarA = /(?:pasar a|mover a|cambiar a|dejar(?:\s+solo)?\s+en\s+secci[oó]n)\s+([a-záéíóúñ]+)/i;
+                                    const matchPasarA = cambiosLower.match(regexPasarA);
+                                    if (matchPasarA) {
+                                        const seccionDestino = matchPasarA[1].trim();
+                                        let encontradoEnDestino = false;
+                                        let pdfDestinoSubido = false;
+                                        
+                                        for (const otroPdf of pdfsData) {
+                                            const nombreOtroPdf = otroPdf.name.toLowerCase();
+                                            if (nombreOtroPdf.includes(seccionDestino)) {
+                                                pdfDestinoSubido = true;
+                                                const datosOtroPdf = pdfCache.get(otroPdf.name);
+                                                if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) {
+                                                    encontradoEnDestino = true; break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (!pdfDestinoSubido) erroresEncontrados.push(`${codigo} -> No se pudo validar si se pasó a ${seccionDestino} porque no se detectó el PDF de ${seccionDestino}`);
+                                        else if (!encontradoEnDestino) erroresEncontrados.push(`${codigo} -> Se solicitó pasar a '${seccionDestino}' pero NO se encontró en ${seccionDestino}`);
+                                        else if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} -> Se pasó a '${seccionDestino}' pero el código AÚN está en este PDF`);
+                                        
+                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowString);
+                                        if (cambiosCelda.trim().toLowerCase() === matchPasarA[0]) continue;
+                                    }
+
+                                    if (idxCodigo === -1) {
+                                        let encontradoEnOtroLado = false;
+                                        for (const otroPdf of pdfsData) {
+                                            if (otroPdf.name === pdfFile.name) continue;
+                                            const datosOtroPdf = pdfCache.get(otroPdf.name);
+                                            if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnOtroLado = true; break; }
+                                        }
+                                        
+                                        if (!matchPasarA) {
+                                            if (!encontradoEnOtroLado) {
+                                                codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
+                                            } else if (enTodasLasSecciones) {
+                                                erroresEncontrados.push(`${codigo} -> El código no aparece en este PDF (se pidió validarlo en todas las secciones)`);
+                                            }
+                                        }
+                                        continue;
+                                    }
+
+                                    if (!enTodasLasSecciones) {
+                                        codigosProcesadosGlobal.add(rowString);
+                                    }
+
+                                    let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
+                                    let matchNextCode = restoPdf.match(/\b[a-z]{2,3}\d{4,5}\b/i);
                                     
-                                    // FIX: bloqueAmpliado también aumentado para mayor cobertura
-                                    let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + 600);
- 
-                                    let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
-                                    let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
- 
-                                    if (matchNumColor) {
-                                        let restoLinea = matchNumColor[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                    let blockSize = 300; 
+                                    if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 400) {
+                                        blockSize = codigoNorm.length + matchNextCode.index;
+                                    }
+                                    let bloquePdf = textoPdf.substring(idxCodigo, idxCodigo + blockSize);
+
+                                    if (cambiosLower.includes('existencias limitadas')) {
+                                        if (!bloquePdf.toLowerCase().includes('existencias limitadas')) {
+                                            erroresEncontrados.push(`${codigo} -> No se encontró el texto "Existencias limitadas" en el PDF`);
+                                        }
+                                    }
+
+                                    let preciosAdl = [...cambiosCelda.matchAll(/(?:q\.?\s*)(\d+)/gi)].map(m => m[1]);
+                                    for (let precio of preciosAdl) {
+                                        let regexPrecio = new RegExp(`q\\.?\\s*${precio}\\b`, 'i');
+                                        if (!regexPrecio.test(bloquePdf)) erroresEncontrados.push(`${codigo} -> Precio no cuadra: Q.${precio}`);
+                                    }
+
+                                    let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\beliminar\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/en (todas las secciones|secci[oó]n de[^\d]+)/gi, '');
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(\d+)([a-zA-ZñÑáéíóúÁÉÍÓÚ]+)/g, '$1 $2');
+
+                                    let regexColoresSplit = new RegExp(`(${patronFinalCombinado})`, 'gi');
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(regexColoresSplit, '\n$1');
+
+                                    let lineasCambio = cambiosCeldaSinPrecio.split('\n');
+                                    let lineasFaltantes = [];
+
+                                    for (let linea of lineasCambio) {
+                                        let lineaNorm = normalizarTexto(linea);
+                                        if (!lineaNorm) continue;
+
+                                        if (/\bfuera\b/i.test(lineaNorm)) {
+                                            let lineaSinFuera = lineaNorm.replace(/\bfuera\b/ig, '').trim();
+                                            if (lineaSinFuera) {
+                                                let regexBuscarFuera = new RegExp(escapeRegExp(lineaSinFuera).replace(/[\s\/,\-]+/g, '[\\s\\/\\,\\-]+'), 'i');
+                                                if (regexBuscarFuera.test(bloquePdf)) {
+                                                    erroresEncontrados.push(`${codigo} -> Se pidió eliminar '${lineaSinFuera}' pero AÚN aparece en el PDF`);
+                                                }
+                                            }
+                                            continue; 
+                                        }
+
+                                        let regexSoloColor = new RegExp(`^(${patronFinalCombinado})$`, 'i');
+                                        let esSoloColor = regexSoloColor.test(lineaNorm);
+
+                                        let matchNumColor = lineaNorm.match(/^(\d{1,3})\s+(.+)/);
+                                        let restoLinea = matchNumColor ? matchNumColor[2] : lineaNorm;
+                                        restoLinea = escapeRegExp(restoLinea);
+
+                                        let encontradoEnPdf = false;
+                                        
+                                        let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + 600);
+                                        
+                                        let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
+                                        let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
+
                                         let regexBuscarEnPdf = new RegExp(`(?:\\d{1,3}\\s+)?${restoLinea}`, 'i');
                                         
                                         if (regexBuscarEnPdf.test(bloquePdfParaBusqueda)) {
@@ -377,45 +450,44 @@
                                         } else if (/\d/.test(restoLinea) && regexBuscarEnPdf.test(bloqueAmpliadoParaBusqueda)) {
                                             encontradoEnPdf = true;
                                         }
-                                    } else {
-                                        if (bloquePdfParaBusqueda.includes(lineaNorm)) {
-                                            encontradoEnPdf = true;
-                                        } else if (/\d/.test(lineaNorm) && bloqueAmpliadoParaBusqueda.includes(lineaNorm)) {
-                                            encontradoEnPdf = true;
+
+                                        if (!encontradoEnPdf) {
+                                            let lineaLimpia = linea.replace(/[,:\-\s]+$/, '').trim();
+                                            if (lineaLimpia) {
+                                                lineaLimpia = lineaLimpia.charAt(0).toUpperCase() + lineaLimpia.slice(1);
+                                                let regexEmbellecedor = new RegExp(`^(${patronFinalCombinado})\\s*[\\/\\-:]?\\s*`, 'i');
+                                                lineaLimpia = lineaLimpia.replace(regexEmbellecedor, (match, p1) => {
+                                                    let words = p1.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+                                                    return esSoloColor ? words.join(' ') : words.join(' ') + ' / ';
+                                                });
+                                                lineasFaltantes.push(lineaLimpia);
+                                            }
                                         }
                                     }
- 
-                                    if (!encontradoEnPdf) {
-                                        let lineaLimpia = linea.replace(/[,:\-\s]+$/, '').trim();
-                                        if (lineaLimpia) {
-                                            lineaLimpia = lineaLimpia.charAt(0).toUpperCase() + lineaLimpia.slice(1);
-                                            let regexEmbellecedor = new RegExp(`^(${patronFinalCombinado})\\s*[\\/\\-:]?\\s*`, 'i');
-                                            lineaLimpia = lineaLimpia.replace(regexEmbellecedor, (match, p1) => {
-                                                let words = p1.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
-                                                return esSoloColor ? words.join(' ') : words.join(' ') + ' / ';
-                                            });
-                                            lineasFaltantes.push(lineaLimpia);
-                                        }
-                                    }
+
+                                    if (lineasFaltantes.length > 0) erroresEncontrados.push(`${codigo} -> Revisar: ${lineasFaltantes.join(', ')}`);
                                 }
- 
-                                if (lineasFaltantes.length > 0) erroresEncontrados.push(`${codigo} - ❌ Revisar: ${lineasFaltantes.join(', ')}`);
                             }
                         }
- 
+
                         if (erroresEncontrados.length > 0) {
                             globalReport.push(`\n[ ${pdfFile.name} ]\n` + erroresEncontrados.join('\n'));
                             totalAlerts += erroresEncontrados.length;
                         } else {
-                            globalReport.push(`\n[ ${pdfFile.name} ]\n✅ Validado correctamente. Sin errores.`);
+                            globalReport.push(`\n[ ${pdfFile.name} ]\nValidado correctamente. Sin errores.`);
                         }
                     }
- 
+
+                    if (codigosCompletamenteNoEncontrados.size > 0) {
+                        globalReport.push(`\n[ CÓDIGOS NO ENCONTRADOS EN NINGÚN CATÁLOGO ]\n` + Array.from(codigosCompletamenteNoEncontrados).join('\n'));
+                        totalAlerts += codigosCompletamenteNoEncontrados.size;
+                    }
+
                     if (globalReport.length > 0) {
                         setReport(["REPORTE DE VALIDACIÓN", "=======================", ...globalReport]);
-                        addLog(`✅ ¡Proceso completado! Se encontraron ${totalAlerts} alertas.`);
+                        addLog(`✅ ¡Proceso completado! Se generaron ${totalAlerts} líneas de reporte.`);
                     }
- 
+
                 } catch (error) {
                     console.error(error);
                     addLog(`❌ Error del sistema: ${error.message}`);
@@ -423,8 +495,7 @@
                     setIsProcessing(false);
                 }
             };
- 
-            // FIX: descarga usando encodeURIComponent para evitar problemas con caracteres especiales
+
             const downloadReport = () => {
                 if (!report) return;
                 const contenido = report.join('\n');
@@ -436,15 +507,13 @@
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                // FIX: pequeño delay antes de revocar para garantizar que el navegador terminó la descarga
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
             };
- 
+
             return (
                 <div className="min-h-screen bg-[#F8F9FA] text-[#111111] p-4 sm:p-6 font-sans">
                     <div className="max-w-3xl mx-auto pt-2 md:pt-4">
                         
-                        {/* Header Compacto */}
                         <header className="mb-6 flex flex-col gap-2">
                             <h1 className="text-3xl md:text-4xl font-extrabold text-[#111111] tracking-tight flex items-center gap-3">
                                 Validación 
@@ -458,11 +527,8 @@
                                 </span>
                             </div>
                         </header>
- 
-                        {/* Tarjetas Subida de Archivos */}
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-                            
-                            {/* Tarjeta PDF */}
                             <div 
                                 className="bg-white rounded-[1.25rem] p-5 cursor-pointer hover:border-gray-300 border border-transparent transition-all card-shadow relative"
                                 onClick={() => fileInputPdfRef.current.click()}
@@ -496,8 +562,7 @@
                                     </div>
                                 )}
                             </div>
- 
-                            {/* Tarjeta Excel */}
+
                             <div 
                                 className="bg-white rounded-[1.25rem] p-5 cursor-pointer hover:border-gray-300 border border-transparent transition-all card-shadow relative"
                                 onClick={() => fileInputChangesRef.current.click()}
@@ -519,7 +584,7 @@
                                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-3">Cambios solicitados</p>
                                 
                                 <input ref={fileInputChangesRef} type="file" accept=".xlsx,.csv" multiple className="hidden" onChange={handleChangesUpload} />
- 
+
                                 {changesData.length > 0 && (
                                     <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-gray-100">
                                         {changesData.map((file, idx) => (
@@ -532,8 +597,7 @@
                                 )}
                             </div>
                         </div>
- 
-                        {/* Barra de Acción */}
+
                         <div className="bg-white rounded-[1.25rem] p-4 md:p-5 card-shadow mb-5 flex flex-col sm:flex-row items-center justify-between gap-4 border border-gray-100">
                             <div className="text-center sm:text-left">
                                 <h3 className="text-lg font-bold text-[#111111] mb-0.5">Ejecutar Auditoría</h3>
@@ -549,8 +613,7 @@
                                 ) : 'Iniciar Análisis'}
                             </button>
                         </div>
- 
-                        {/* Logs */}
+
                         {logs.length > 0 && !report && (
                             <div className="bg-white rounded-[1.25rem] p-4 mb-4 card-shadow border border-gray-100">
                                  <div className="font-mono text-[11px] text-gray-500 space-y-1">
@@ -558,8 +621,7 @@
                                 </div>
                             </div>
                         )}
- 
-                        {/* Reporte Final */}
+
                         {report && (
                             <div className="bg-white rounded-[1.25rem] p-5 md:p-6 card-shadow border-t-4 border-[#D4FF26]">
                                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5">
@@ -583,12 +645,12 @@
                                 </div>
                             </div>
                         )}
- 
+
                     </div>
                 </div>
             );
         };
- 
+
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
