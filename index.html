@@ -61,9 +61,7 @@
         const normalizarTexto = (texto) => {
             if (!texto) return "";
             let t = String(texto).toLowerCase();
-            // Quitar tildes para comparación robusta (café == cafe, etc.)
             t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            // Normalizar separadores de colores compuestos a espacio simple
             t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
             t = t.replace(/\bal\b/g, ' ');
             t = t.replace(/\by\b/g, ' ');
@@ -234,12 +232,18 @@
                     const codigosProcesadosGlobal = new Set();
                     const codigosCompletamenteNoEncontrados = new Set();
 
-                    // --- INICIO DEL PARCHE ANTI-LETREROS ---
+                    for (const pdfFile of pdfsData) {
+                        addLog(`🔍 Analizando: ${pdfFile.name}...`);
+                        const dataExtraida = pdfCache.get(pdfFile.name);
+                        
+                        // --- INICIO DEL PARCHE ANTI-LETREROS ---
                         let textoPdf = dataExtraida.normalizado;
                         textoPdf = textoPdf.replace(/todos los productos de esta pagina por q\.?\s*\d+/gi, '');
                         textoPdf = textoPdf.replace(/todo por q\.?\s*\d+/gi, '');
                         textoPdf = textoPdf.replace(/promocion disponible para pag \w+ \w+/gi, '');
                         // --- FIN DEL PARCHE ---
+
+                        const dfList = await leerArchivosCambios(changesData, pdfFile.name);
                         
                         if (dfList.length === 0) {
                             globalReport.push(`\n[ ${pdfFile.name} ]\nNo se encontraron datos para este catálogo en los Excels subidos.`);
@@ -351,7 +355,6 @@
                                         if (cambiosCelda.trim().toLowerCase().match(/^(?:pasar a|mover a|cambiar a|dejar(?:\s+solo)?\s+en\s+secci[oó]n)\s+[a-záéíóúñ]+$/i)) continue;
                                     }
 
-                                    // --- LÓGICA NO ENCONTRADO ---
                                     if (idxCodigo === -1) {
                                         let encontradoEnOtroLado = false;
                                         for (const otroPdf of pdfsData) {
@@ -368,7 +371,6 @@
                                         continue;
                                     }
 
-                                    // --- SI LLEGAMOS AQUÍ, EL CÓDIGO SÍ SE ENCONTRÓ EN ESTE PDF ---
                                     if (!enTodasLasSecciones) {
                                         codigosProcesadosGlobal.add(rowKey);
                                     }
