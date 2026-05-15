@@ -237,7 +237,13 @@
                     for (const pdfFile of pdfsData) {
                         addLog(`🔍 Analizando: ${pdfFile.name}...`);
                         const dataExtraida = pdfCache.get(pdfFile.name);
-                        const textoPdf = dataExtraida.normalizado;
+                        
+                        // --- INICIO DEL PARCHE ANTI-LETREROS ---
+                        let textoPdf = dataExtraida.normalizado;
+                        textoPdf = textoPdf.replace(/todos los productos de esta pagina por q\.?\s*\d+/gi, '');
+                        textoPdf = textoPdf.replace(/todo por q\.?\s*\d+/gi, '');
+                        textoPdf = textoPdf.replace(/promocion disponible para pag.*/gi, '');
+                        // --- FIN DEL PARCHE ---
 
                         const dfList = await leerArchivosCambios(changesData, pdfFile.name);
                         
