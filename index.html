@@ -234,18 +234,12 @@
                     const codigosProcesadosGlobal = new Set();
                     const codigosCompletamenteNoEncontrados = new Set();
 
-                    for (const pdfFile of pdfsData) {
-                        addLog(`🔍 Analizando: ${pdfFile.name}...`);
-                        const dataExtraida = pdfCache.get(pdfFile.name);
-                        
-                        // --- INICIO DEL PARCHE ANTI-LETREROS ---
+                    // --- INICIO DEL PARCHE ANTI-LETREROS ---
                         let textoPdf = dataExtraida.normalizado;
                         textoPdf = textoPdf.replace(/todos los productos de esta pagina por q\.?\s*\d+/gi, '');
                         textoPdf = textoPdf.replace(/todo por q\.?\s*\d+/gi, '');
-                        textoPdf = textoPdf.replace(/promocion disponible para pag.*/gi, '');
+                        textoPdf = textoPdf.replace(/promocion disponible para pag \w+ \w+/gi, '');
                         // --- FIN DEL PARCHE ---
-
-                        const dfList = await leerArchivosCambios(changesData, pdfFile.name);
                         
                         if (dfList.length === 0) {
                             globalReport.push(`\n[ ${pdfFile.name} ]\nNo se encontraron datos para este catálogo en los Excels subidos.`);
