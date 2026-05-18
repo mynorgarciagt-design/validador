@@ -435,7 +435,11 @@
 
                                         let encontradoEnPdf = false;
                                         
-                                        let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + 600);
+                                        let maxAmpliado = 600;
+if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 600) {
+    maxAmpliado = codigoNorm.length + matchNextCode.index;
+}
+let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
                                         
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
@@ -484,6 +488,98 @@
                         setReport(["REPORTE DE VALIDACIÓN", "=======================", ...globalReport]);
                         addLog(`✅ ¡Proceso completado! Se generaron ${totalAlerts} líneas de reporte.`);
                     }
+
+                } catch (error) {
+                    console.error(error);
+                    addLog(`❌ Error del sistema: ${error.message}`);
+                } finally {
+                    setIsProcessing(false);
+                }
+            };
+
+            const handleValidarLevantados = async () => {
+                if (pdfsData.length === 0 || changesData.length === 0) {
+                    alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV.");
+                    return;
+                }
+
+                setIsProcessing(true); setLogs([]); setReport(null);
+
+                try {
+                    addLog("⚙️ Iniciando Validador de Códigos Levantados...");
+                    addLog("⏳ Extrayendo texto de todos los PDFs...");
+
+                    let textoGlobalPdfs = "";
+                    for (const pdfFile of pdfsData) {
+                        try {
+                            const data = await extraerTextoPdf(pdfFile);
+                            textoGlobalPdfs += data.normalizado + " \n ";
+                        } catch (err) {
+                            addLog(`⚠️ Error leyendo ${pdfFile.name}: ${err.message}`);
+                        }
+                    }
+
+                    addLog("📊 Extrayendo TODOS los códigos de los Excels...");
+                    let codigosExcel = new Set();
+
+                    for (const file of changesData) {
+                        const buffer = await file.arrayBuffer();
+                        const esCSV = file.name.toLowerCase().endsWith('.csv');
+                        const workbook = esCSV
+                            ? XLSX.read(new Uint8Array(buffer), {type: 'array', raw: true})
+                            : XLSX.read(new Uint8Array(buffer), {type: 'array'});
+
+                        for (const sheet of workbook.SheetNames) {
+                            const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet], {header: 1, defval: ""});
+                            if (rows.length === 0) continue;
+                            
+                            // Buscar dinámicamente en qué columna está el encabezado "código"
+                            let colIndex = 0; // Por defecto la primera
+                            for (let c = 0; c < rows[0].length; c++) {
+                                let header = String(rows[0][c] || "").trim().toLowerCase();
+                                if (header === "codigo" || header === "código" || header === "estilo") {
+                                    colIndex = c;
+                                    break;
+                                }
+                            }
+
+                            for (let r = 1; r < rows.length; r++) {
+                                let celda = String(rows[r][colIndex] || "").trim();
+                                // Ignorar celdas vacías o encabezados
+                                if (!celda || /^(nan|c[oó]digo|estilo)$/i.test(celda)) continue;
+                                
+                                // Separar si vienen varios en una celda (ej. MM123 / MM124)
+                                let separados = celda.split(/[\/\\]+/).map(c => c.trim()).filter(c => c);
+                                separados.forEach(c => codigosExcel.add(c));
+                            }
+                        }
+                    }
+
+                    addLog(`🔍 Buscando ${codigosExcel.size} códigos únicos en los PDFs...`);
+                    let codigosFaltantes = [];
+
+                    for (let codigo of codigosExcel) {
+                        let codigoNorm = normalizarTexto(codigo);
+                        if (!codigoNorm) continue;
+
+                        if (!textoGlobalPdfs.includes(codigoNorm)) {
+                            codigosFaltantes.push(codigo);
+                        }
+                    }
+
+                    let reporteFinal = [];
+                    if (codigosFaltantes.length > 0) {
+                        reporteFinal.push("[ CÓDIGOS DEL EXCEL NO ENCONTRADOS EN LOS PDFS ]");
+                        reporteFinal.push(`Se detectaron ${codigosFaltantes.length} códigos que faltan en el diseño:\n`);
+                        codigosFaltantes.forEach(c => reporteFinal.push(`-> ${c} FALTA LEVANTAR`));
+                        addLog(`⚠️ Se encontraron ${codigosFaltantes.length} códigos faltantes.`);
+                    } else {
+                        reporteFinal.push("[ VALIDACIÓN PERFECTA ]");
+                        reporteFinal.push(`¡Todo nítido! Los ${codigosExcel.size} códigos del Excel están colocados en los PDFs.`);
+                        addLog(`✅ ¡Todos los códigos fueron encontrados!`);
+                    }
+
+                    setReport(["REPORTE DE CÓDIGOS LEVANTADOS", "=======================", ...reporteFinal]);
 
                 } catch (error) {
                     console.error(error);
@@ -600,15 +696,24 @@
                                 <h3 className="text-lg font-bold text-[#111111] mb-0.5">Ejecutar Auditoría</h3>
                                 <p className="text-xs text-gray-500">Procesar documentos cruzando catálogos vs Excel.</p>
                             </div>
-                            <button 
-                                onClick={handleAudit} 
-                                disabled={isProcessing}
-                                className={`bg-[#111111] text-white px-6 py-2.5 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] w-full sm:w-auto shadow-sm shrink-0 ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
-                            >
-                                {isProcessing ? (
-                                    <><svg className="animate-spin h-4 w-4 text-[#D4FF26]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Procesando...</>
-                                ) : 'Iniciar Análisis'}
-                            </button>
+                           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                                <button 
+                                    onClick={handleAudit} 
+                                    disabled={isProcessing}
+                                    className={`bg-[#111111] text-white px-6 py-2.5 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] w-full sm:w-auto shadow-sm shrink-0 ${isProcessing ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                >
+                                    {isProcessing ? (
+                                        <><svg className="animate-spin h-4 w-4 text-[#D4FF26]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Procesando...</>
+                                    ) : 'Auditoría de Cambios'}
+                                </button>
+                                <button 
+                                    onClick={handleValidarLevantados} 
+                                    disabled={isProcessing}
+                                    className={`bg-[#D4FF26] text-[#111111] px-6 py-2.5 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-transform hover:scale-[1.02] active:scale-[0.98] w-full sm:w-auto shadow-sm shrink-0 border border-transparent ${isProcessing ? 'opacity-70 cursor-not-allowed' : 'hover:border-[#111111]'}`}
+                                >
+                                    {isProcessing ? 'Procesando...' : 'Validar Levantados'}
+                                </button>
+                            </div>
                         </div>
 
                         {logs.length > 0 && !report && (
