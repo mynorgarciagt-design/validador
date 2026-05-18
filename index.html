@@ -276,7 +276,7 @@
                                     let cambiosLower = cambiosCelda.toLowerCase();
 
                                     let rowKey = codigoNorm + "\x00" + normalizarTexto(cambiosCelda);
-                                    let enTodasLasSecciones = cambiosLower.includes('en todas las secciones');
+                                    let enTodasLasSecciones = cambiosLower.includes('todas las secciones');
 
                                     if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
                                         continue; 
