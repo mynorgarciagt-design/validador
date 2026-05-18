@@ -114,7 +114,7 @@
 
         const leerArchivosCambios = async (archivosFiles, pdfName) => {
             let dfList = [];
-            let pdfNameClean = pdfName.toLowerCase().replace('.pdf', '').replace(/^\d+\s*/, ''); 
+            let pdfNameClean = pdfName.toLowerCase().replace('.pdf', '').replace(/^[\d\s]+/, ''); 
             const palabrasClavePdf = pdfNameClean.split(/\s+/).filter(w => w.length > 2);
 
             for (const file of archivosFiles) {
@@ -275,7 +275,7 @@
                                     let idxCodigo = textoPdf.indexOf(codigoNorm);
                                     let cambiosLower = cambiosCelda.toLowerCase();
 
-                                    let rowKey = codigoNorm + "|" + normalizarTexto(cambiosCelda);
+                                    let rowKey = codigoNorm + "\x00" + normalizarTexto(cambiosCelda);
                                     let enTodasLasSecciones = cambiosLower.includes('en todas las secciones');
 
                                     if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
@@ -397,7 +397,7 @@
                                     }
 
                                     let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
-                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\beliminar\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(eliminar|borrar|quitar)\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(?:en\s+)?(todas las secciones|secci[oó]n de[^\d]+)/gi, '');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
