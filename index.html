@@ -398,7 +398,7 @@
 
                                     let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\beliminar\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
-                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/en (todas las secciones|secci[oó]n de[^\d]+)/gi, '');
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(?:en\s+)?(todas las secciones|secci[oó]n de[^\d]+)/gi, '');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(\d+)([a-zA-ZñÑáéíóúÁÉÍÓÚ]+)/g, '$1 $2');
