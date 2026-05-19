@@ -114,7 +114,6 @@
 
         const leerArchivosCambios = async (archivosFiles, pdfName) => {
             let dfList = [];
-            // PARCHE: Limpieza total de números al inicio del PDF
             let pdfNameClean = pdfName.toLowerCase().replace('.pdf', '').replace(/^[\d\s]+/, ''); 
             const palabrasClavePdf = pdfNameClean.split(/\s+/).filter(w => w.length > 2);
 
@@ -167,6 +166,20 @@
                     }
                 }
             }
+
+            // Modo forzado: si solo se subió un Excel, se asume que contiene TODO y se lee sin importar el nombre
+            if (dfList.length === 0 && archivosFiles.length === 1) {
+                const file = archivosFiles[0];
+                const buffer = await file.arrayBuffer();
+                const esCSV = file.name.toLowerCase().endsWith('.csv');
+                const workbook = esCSV
+                    ? XLSX.read(new Uint8Array(buffer), {type: 'array', raw: true})
+                    : XLSX.read(new Uint8Array(buffer), {type: 'array'});
+                
+                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
+                if(rows.length > 0) dfList.push(rows);
+            }
+
             return dfList;
         };
 
@@ -237,12 +250,10 @@
                         addLog(`🔍 Analizando: ${pdfFile.name}...`);
                         const dataExtraida = pdfCache.get(pdfFile.name);
                         
-                        // --- INICIO DEL PARCHE ANTI-LETREROS ---
                         let textoPdf = dataExtraida.normalizado;
                         textoPdf = textoPdf.replace(/todos los productos de esta pagina por q\.?\s*\d+/gi, '');
                         textoPdf = textoPdf.replace(/todo por q\.?\s*\d+/gi, '');
                         textoPdf = textoPdf.replace(/promocion disponible para pag \w+ \w+/gi, '');
-                        // --- FIN DEL PARCHE ---
 
                         const dfList = await leerArchivosCambios(changesData, pdfFile.name);
                         
@@ -256,7 +267,6 @@
                         for (const rows of dfList) {
                             if (rows.length === 0) continue;
 
-                            // --- BUSCADOR INTELIGENTE DE COLUMNAS (Fix No.) ---
                             let colCodigo = -1;
                             let colCambio = -1;
 
@@ -266,7 +276,7 @@
                                 if (header === "cambio" || header === "cambios" || header === "instruccion" || header === "instrucción") colCambio = c;
                             }
 
-                            if (colCodigo === -1) colCodigo = 0; // Por defecto la primera si no hay encabezados
+                            if (colCodigo === -1) colCodigo = 0;
 
                             for (let r = 1; r < rows.length; r++) {
                                 const row = rows[r];
@@ -298,10 +308,7 @@
                                     let idxCodigo = textoPdf.indexOf(codigoNorm);
                                     let cambiosLower = cambiosCelda.toLowerCase();
 
-                                    // PARCHE: SEPARADOR SEGURO \x00
                                     let rowKey = codigoNorm + "\x00" + normalizarTexto(cambiosCelda);
-                                    
-                                    // PARCHE: "TODAS LAS SECCIONES" SIN NECESIDAD DE LA PALABRA "EN"
                                     let enTodasLasSecciones = cambiosLower.includes('todas las secciones');
 
                                     if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
@@ -333,8 +340,11 @@
                                         continue;
                                     }
 
-                                    if (/foto|arreglar|imagen|quitar foto/i.test(cambiosLower)) {
+                                    // FIX 3: Frenar análisis si es revisión manual para evitar duplicados
+                                    if (/foto|arreglar|imagen|quitar foto|montaje/i.test(cambiosLower)) {
                                         erroresEncontrados.push(`${codigo} -> Instrucción de diseño (Revisión manual): "${cambiosCelda.replace(/\n/g, ' ')}"`);
+                                        if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
+                                        continue; 
                                     }
 
                                     let textoLimpioEliminacion = cambiosLower.replace(/[\s,.]+/g, ' ').trim();
@@ -402,8 +412,6 @@
                                     }
 
                                     let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
-                                    
-                                    // PARCHE: AMPLIAR RADAR DEL SIGUIENTE CÓDIGO
                                     let matchNextCode = restoPdf.match(/\b[a-z]{2,4}\d{3,6}\b/i);
                                     
                                     let blockSize = 300; 
@@ -426,10 +434,7 @@
 
                                     let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
                                     
-                                    // PARCHE: ELIMINAR, BORRAR Y QUITAR SON LO MISMO
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(eliminar|borrar|quitar)\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
-                                    
-                                    // PARCHE: TODAS LAS SECCIONES
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(?:en\s+)?(todas las secciones|secci[oó]n de[^\d]+)/gi, '');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
@@ -460,11 +465,24 @@
                                         let regexSoloColor = new RegExp(`^(${patronFinalCombinado})$`, 'i');
                                         let esSoloColor = regexSoloColor.test(lineaNorm);
 
-                                        let matchNumColor = lineaNorm.match(/^(\d{1,3})\s+(.+)/);
-                                        let restoLinea = matchNumColor ? matchNumColor[2] : lineaNorm;
+                                        // FIX 1: Extracción inteligente del color (Para no robarse las tallas)
+                                        let tieneColor = false;
+                                        let restoLinea = lineaNorm;
+                                        
+                                        for (let c of COLORES_PREDEFINIDOS) {
+                                            let normColor = normalizarTexto(c);
+                                            if (new RegExp(`\\b${escapeRegExp(normColor)}\\b`, 'i').test(lineaNorm)) {
+                                                tieneColor = true;
+                                                let regexCodeColor = new RegExp(`^(\\d{1,3})\\s+(${escapeRegExp(normColor)}\\b.*)`, 'i');
+                                                let matchCode = lineaNorm.match(regexCodeColor);
+                                                if (matchCode) {
+                                                    restoLinea = matchCode[2];
+                                                }
+                                                break;
+                                            }
+                                        }
                                         
                                         let restoLineaEscaped = escapeRegExp(restoLinea);
-
                                         let encontradoEnPdf = false;
                                         
                                         let maxAmpliado = 600;
@@ -476,37 +494,39 @@
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
 
-                                        // Saber si la frase del ADL tiene un color o son puras tallas
-                                        let tieneColor = false;
-                                        for (let c of COLORES_PREDEFINIDOS) {
-                                            if (new RegExp(`\\b${escapeRegExp(normalizarTexto(c))}\\b`, 'i').test(lineaNorm)) {
-                                                tieneColor = true; break;
-                                            }
-                                        }
-
-                                        // Ajustar radar (incluye comas como separador válido)
+                                        // FIX 2: Tolerar espacios en los puntos (Ej. 36 . 5)
                                         let regexBuscarEnPdfStr = restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+');
+                                        regexBuscarEnPdfStr = regexBuscarEnPdfStr.replace(/\\\./g, '\\s*\\.\\s*');
+
                                         if (tieneColor) {
                                             regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
                                         }
                                         let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
 
-                                        // MOTOR DETECTOR DE TALLAS SOBRANTES
+                                        // MOTOR DETECTOR DE TALLAS SOBRANTES MEJORADO
                                         const verificarMatch = (textoBusqueda) => {
                                             let match = textoBusqueda.match(regexBuscarEnPdf);
                                             if (match) {
                                                 let idx = match.index;
                                                 let matchLen = match[0].length;
-                                                // Revisamos qué hay inmediatamente antes y después de lo que pidió el ADL
                                                 let textBefore = textoBusqueda.substring(Math.max(0, idx - 15), idx);
                                                 let textAfter = textoBusqueda.substring(idx + matchLen, idx + matchLen + 15);
 
-                                                // Si hay números de tallas o letras S,M,L,XL pegadas, es porque no las borraron
                                                 let regexTallaSobranteDespues = /^[\s\/\,\-y]*(?:\d{1,2}(?:\.5)?|\d{1,2}\/\d{1,2}|xs|s|m|l|xl|xxl)\b/i;
                                                 let regexTallaSobranteAntes = /\b(?:\d{1,2}(?:\.5)?|\d{1,2}\/\d{1,2}|xs|s|m|l|xl|xxl)[\s\/\,\-y]*$/i;
 
-                                                if (regexTallaSobranteDespues.test(textAfter) || regexTallaSobranteAntes.test(textBefore)) {
+                                                if (regexTallaSobranteDespues.test(textAfter)) {
                                                     return "sobrante";
+                                                }
+                                                
+                                                let matchAntes = textBefore.match(regexTallaSobranteAntes);
+                                                if (matchAntes) {
+                                                    let idxMatchAntes = matchAntes.index;
+                                                    let charBefore = textBefore.substring(Math.max(0, idxMatchAntes - 5), idxMatchAntes).toLowerCase();
+                                                    // Evitar confundir tallas con Q de precios o Páginas
+                                                    if (!charBefore.includes('q') && !charBefore.includes('pag') && !charBefore.includes('pág')) {
+                                                        return "sobrante";
+                                                    }
                                                 }
                                                 return "ok";
                                             }
@@ -518,7 +538,7 @@
                                             encontradoEnPdf = true;
                                         } else if (resBusqueda === "sobrante") {
                                             erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas pegadas a la par que no se eliminaron.`);
-                                            encontradoEnPdf = true; // Lo ponemos true para que no repita el error genérico
+                                            encontradoEnPdf = true;
                                         } else if (/\d/.test(restoLinea)) {
                                             let resAmp = verificarMatch(bloqueAmpliadoParaBusqueda);
                                             if (resAmp === "ok") {
