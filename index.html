@@ -213,7 +213,7 @@
                     addLog("⚙️ Cargando algoritmos de validación...");
                     
                     let patronColores = obtenerPatronColores();
-                    let patronDinamico = `\\b\\d{1,3}\\s+(?!al\\b|y\\b)[a-z]+(?:\\s+(?!al\\b|y\\b)[a-z]+)?\\b`;
+                    let patronDinamico = `(?<![\\.,])\\b\\d{1,3}\\s+(?!al\\b|y\\b|con\\b)[a-z]+(?:\\s+(?!al\\b|y\\b|con\\b)[a-z]+)?\\b`;
                     let patronFinalCombinado = patronColores ? `(?:${patronDinamico}|${patronColores})` : patronDinamico;
                     
                     addLog("⏳ Pre-procesando PDFs...");
@@ -476,12 +476,57 @@
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
 
-                                        let regexBuscarEnPdf = new RegExp(`(?:\\d{1,3}\\s+)?${restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\-]+')}`, 'i');
-                                        
-                                        if (regexBuscarEnPdf.test(bloquePdfParaBusqueda)) {
+                                        // Saber si la frase del ADL tiene un color o son puras tallas
+                                        let tieneColor = false;
+                                        for (let c of COLORES_PREDEFINIDOS) {
+                                            if (new RegExp(`\\b${escapeRegExp(normalizarTexto(c))}\\b`, 'i').test(lineaNorm)) {
+                                                tieneColor = true; break;
+                                            }
+                                        }
+
+                                        // Ajustar radar (incluye comas como separador válido)
+                                        let regexBuscarEnPdfStr = restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+');
+                                        if (tieneColor) {
+                                            regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
+                                        }
+                                        let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
+
+                                        // MOTOR DETECTOR DE TALLAS SOBRANTES
+                                        const verificarMatch = (textoBusqueda) => {
+                                            let match = textoBusqueda.match(regexBuscarEnPdf);
+                                            if (match) {
+                                                let idx = match.index;
+                                                let matchLen = match[0].length;
+                                                // Revisamos qué hay inmediatamente antes y después de lo que pidió el ADL
+                                                let textBefore = textoBusqueda.substring(Math.max(0, idx - 15), idx);
+                                                let textAfter = textoBusqueda.substring(idx + matchLen, idx + matchLen + 15);
+
+                                                // Si hay números de tallas o letras S,M,L,XL pegadas, es porque no las borraron
+                                                let regexTallaSobranteDespues = /^[\s\/\,\-y]*(?:\d{1,2}(?:\.5)?|\d{1,2}\/\d{1,2}|xs|s|m|l|xl|xxl)\b/i;
+                                                let regexTallaSobranteAntes = /\b(?:\d{1,2}(?:\.5)?|\d{1,2}\/\d{1,2}|xs|s|m|l|xl|xxl)[\s\/\,\-y]*$/i;
+
+                                                if (regexTallaSobranteDespues.test(textAfter) || regexTallaSobranteAntes.test(textBefore)) {
+                                                    return "sobrante";
+                                                }
+                                                return "ok";
+                                            }
+                                            return "nada";
+                                        };
+
+                                        let resBusqueda = verificarMatch(bloquePdfParaBusqueda);
+                                        if (resBusqueda === "ok") {
                                             encontradoEnPdf = true;
-                                        } else if (/\d/.test(restoLinea) && regexBuscarEnPdf.test(bloqueAmpliadoParaBusqueda)) {
-                                            encontradoEnPdf = true;
+                                        } else if (resBusqueda === "sobrante") {
+                                            erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas pegadas a la par que no se eliminaron.`);
+                                            encontradoEnPdf = true; // Lo ponemos true para que no repita el error genérico
+                                        } else if (/\d/.test(restoLinea)) {
+                                            let resAmp = verificarMatch(bloqueAmpliadoParaBusqueda);
+                                            if (resAmp === "ok") {
+                                                encontradoEnPdf = true;
+                                            } else if (resAmp === "sobrante") {
+                                                erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas pegadas a la par que no se eliminaron.`);
+                                                encontradoEnPdf = true;
+                                            }
                                         }
 
                                         if (!encontradoEnPdf) {
