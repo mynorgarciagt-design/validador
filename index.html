@@ -114,6 +114,7 @@
 
         const leerArchivosCambios = async (archivosFiles, pdfName) => {
             let dfList = [];
+            // PARCHE: Limpieza total de números al inicio del PDF
             let pdfNameClean = pdfName.toLowerCase().replace('.pdf', '').replace(/^[\d\s]+/, ''); 
             const palabrasClavePdf = pdfNameClean.split(/\s+/).filter(w => w.length > 2);
 
@@ -253,29 +254,54 @@
                         let erroresEncontrados = [];
 
                         for (const rows of dfList) {
+                            if (rows.length === 0) continue;
+
+                            // --- BUSCADOR INTELIGENTE DE COLUMNAS (Fix No.) ---
+                            let colCodigo = -1;
+                            let colCambio = -1;
+
+                            for (let c = 0; c < rows[0].length; c++) {
+                                let header = String(rows[0][c] || "").trim().toLowerCase();
+                                if (header === "codigo" || header === "código" || header === "estilo") colCodigo = c;
+                                if (header === "cambio" || header === "cambios" || header === "instruccion" || header === "instrucción") colCambio = c;
+                            }
+
+                            if (colCodigo === -1) colCodigo = 0; // Por defecto la primera si no hay encabezados
+
                             for (let r = 1; r < rows.length; r++) {
                                 const row = rows[r];
                                 if (!row || row.length === 0) continue;
                                 
-                                let codigoCelda = String(row[0] || "").trim();
-                                if (!codigoCelda || codigoCelda.toLowerCase() === 'nan' || codigoCelda.toLowerCase() === 'codigo') continue;
+                                let codigoCelda = String(row[colCodigo] || "").trim();
+                                if (!codigoCelda || codigoCelda.toLowerCase() === 'nan' || codigoCelda.toLowerCase() === 'codigo' || codigoCelda.toLowerCase() === 'estilo') continue;
 
                                 let codigosSeparados = codigoCelda.split(/[\/\\]+/).map(c => c.trim()).filter(c => c);
 
                                 for (let codigo of codigosSeparados) {
                                     let cambiosCelda = "";
-                                    for (let i = 1; i < row.length; i++) {
-                                        let celda = String(row[i] || "").trim();
-                                        if (celda && celda.toLowerCase() !== 'nan') cambiosCelda += celda + "\n";
+                                    
+                                    if (colCambio !== -1) {
+                                        cambiosCelda = String(row[colCambio] || "").trim();
+                                    } else {
+                                        for (let i = 0; i < row.length; i++) {
+                                            if (i === colCodigo) continue;
+                                            let celda = String(row[i] || "").trim();
+                                            if (celda && celda.toLowerCase() !== 'nan') cambiosCelda += celda + "\n";
+                                        }
                                     }
+                                    
                                     cambiosCelda = cambiosCelda.trim();
+                                    if (!cambiosCelda) continue;
                                     
                                     let codigoNorm = normalizarTexto(codigo);
                                     if (!codigoNorm) continue;
                                     let idxCodigo = textoPdf.indexOf(codigoNorm);
                                     let cambiosLower = cambiosCelda.toLowerCase();
 
+                                    // PARCHE: SEPARADOR SEGURO \x00
                                     let rowKey = codigoNorm + "\x00" + normalizarTexto(cambiosCelda);
+                                    
+                                    // PARCHE: "TODAS LAS SECCIONES" SIN NECESIDAD DE LA PALABRA "EN"
                                     let enTodasLasSecciones = cambiosLower.includes('todas las secciones');
 
                                     if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
@@ -376,7 +402,9 @@
                                     }
 
                                     let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
-                                    let matchNextCode = restoPdf.match(/\b[a-z]{2,3}\d{4,5}\b/i);
+                                    
+                                    // PARCHE: AMPLIAR RADAR DEL SIGUIENTE CÓDIGO
+                                    let matchNextCode = restoPdf.match(/\b[a-z]{2,4}\d{3,6}\b/i);
                                     
                                     let blockSize = 300; 
                                     if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 400) {
@@ -397,7 +425,11 @@
                                     }
 
                                     let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
+                                    
+                                    // PARCHE: ELIMINAR, BORRAR Y QUITAR SON LO MISMO
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(eliminar|borrar|quitar)\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
+                                    
+                                    // PARCHE: TODAS LAS SECCIONES
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(?:en\s+)?(todas las secciones|secci[oó]n de[^\d]+)/gi, '');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
@@ -436,10 +468,10 @@
                                         let encontradoEnPdf = false;
                                         
                                         let maxAmpliado = 600;
-if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 600) {
-    maxAmpliado = codigoNorm.length + matchNextCode.index;
-}
-let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
+                                        if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 600) {
+                                            maxAmpliado = codigoNorm.length + matchNextCode.index;
+                                        }
+                                        let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
                                         
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
@@ -533,8 +565,7 @@ let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
                             const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet], {header: 1, defval: ""});
                             if (rows.length === 0) continue;
                             
-                            // Buscar dinámicamente en qué columna está el encabezado "código"
-                            let colIndex = 0; // Por defecto la primera
+                            let colIndex = 0; 
                             for (let c = 0; c < rows[0].length; c++) {
                                 let header = String(rows[0][c] || "").trim().toLowerCase();
                                 if (header === "codigo" || header === "código" || header === "estilo") {
@@ -545,10 +576,8 @@ let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
 
                             for (let r = 1; r < rows.length; r++) {
                                 let celda = String(rows[r][colIndex] || "").trim();
-                                // Ignorar celdas vacías o encabezados
                                 if (!celda || /^(nan|c[oó]digo|estilo)$/i.test(celda)) continue;
                                 
-                                // Separar si vienen varios en una celda (ej. MM123 / MM124)
                                 let separados = celda.split(/[\/\\]+/).map(c => c.trim()).filter(c => c);
                                 separados.forEach(c => codigosExcel.add(c));
                             }
