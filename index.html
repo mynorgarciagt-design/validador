@@ -167,7 +167,6 @@
                 }
             }
 
-            // Modo forzado: si solo se subió un Excel, se asume que contiene TODO y se lee sin importar el nombre
             if (dfList.length === 0 && archivosFiles.length === 1) {
                 const file = archivosFiles[0];
                 const buffer = await file.arrayBuffer();
@@ -340,7 +339,6 @@
                                         continue;
                                     }
 
-                                    // FIX 3: Frenar análisis si es revisión manual para evitar duplicados
                                     if (/foto|arreglar|imagen|quitar foto|montaje/i.test(cambiosLower)) {
                                         erroresEncontrados.push(`${codigo} -> Instrucción de diseño (Revisión manual): "${cambiosCelda.replace(/\n/g, ' ')}"`);
                                         if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
@@ -446,6 +444,9 @@
                                     let lineasCambio = cambiosCeldaSinPrecio.split('\n');
                                     let lineasFaltantes = [];
 
+                                    // Para que corte los colores en el orden correcto
+                                    let coloresOrdenados = [...COLORES_PREDEFINIDOS].sort((a, b) => b.length - a.length);
+
                                     for (let linea of lineasCambio) {
                                         let lineaNorm = normalizarTexto(linea);
                                         if (!lineaNorm) continue;
@@ -465,18 +466,20 @@
                                         let regexSoloColor = new RegExp(`^(${patronFinalCombinado})$`, 'i');
                                         let esSoloColor = regexSoloColor.test(lineaNorm);
 
-                                        // FIX 1: Extracción inteligente del color (Para no robarse las tallas)
+                                        // NUEVA LÓGICA: IDENTIFICAR EL COLOR Y AISLAR SU BLOQUE
                                         let tieneColor = false;
                                         let restoLinea = lineaNorm;
+                                        let colorEncontrado = "";
                                         
-                                        for (let c of COLORES_PREDEFINIDOS) {
+                                        for (let c of coloresOrdenados) {
                                             let normColor = normalizarTexto(c);
                                             if (new RegExp(`\\b${escapeRegExp(normColor)}\\b`, 'i').test(lineaNorm)) {
                                                 tieneColor = true;
-                                                let regexCodeColor = new RegExp(`^(\\d{1,3})\\s+(${escapeRegExp(normColor)}\\b.*)`, 'i');
+                                                colorEncontrado = normColor;
+                                                let regexCodeColor = new RegExp(`^(\\d{1,3}\\s+)?(${escapeRegExp(normColor)}\\b.*)`, 'i');
                                                 let matchCode = lineaNorm.match(regexCodeColor);
                                                 if (matchCode) {
-                                                    restoLinea = matchCode[2];
+                                                    restoLinea = matchCode[2] ? matchCode[2] : lineaNorm;
                                                 }
                                                 break;
                                             }
@@ -494,7 +497,42 @@
                                         let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
                                         let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
 
-                                        // FIX 2: Tolerar espacios en los puntos (Ej. 36 . 5)
+                                        // LA MAGIA DE AISLAR: Cortamos el bloque para que contenga SOLO este color
+                                        let bloqueParaAnalizar = bloquePdfParaBusqueda;
+                                        let bloqueAmpliadoParaAnalizar = bloqueAmpliadoParaBusqueda;
+
+                                        if (tieneColor && colorEncontrado) {
+                                            let aislarBloque = (textoCompleto) => {
+                                                let regexColor = new RegExp(`\\b${escapeRegExp(colorEncontrado)}\\b`, 'i');
+                                                let match = textoCompleto.match(regexColor);
+                                                if (match) {
+                                                    let startIdx = match.index;
+                                                    let nextColorIdx = textoCompleto.length;
+                                                    let restoTexto = textoCompleto.substring(startIdx + colorEncontrado.length);
+                                                    
+                                                    for (let c of coloresOrdenados) {
+                                                        let normC = normalizarTexto(c);
+                                                        if (normC === colorEncontrado) continue;
+                                                        let regexC = new RegExp(`\\b${escapeRegExp(normC)}\\b`, 'i');
+                                                        let m = restoTexto.match(regexC);
+                                                        if (m) {
+                                                            let absoluteIdx = startIdx + colorEncontrado.length + m.index;
+                                                            if (absoluteIdx < nextColorIdx) {
+                                                                nextColorIdx = absoluteIdx;
+                                                            }
+                                                        }
+                                                    }
+                                                    // Retornar solo el bloque del color
+                                                    return textoCompleto.substring(Math.max(0, startIdx - 5), nextColorIdx);
+                                                }
+                                                return textoCompleto;
+                                            };
+
+                                            bloqueParaAnalizar = aislarBloque(bloquePdfParaBusqueda);
+                                            bloqueAmpliadoParaAnalizar = aislarBloque(bloqueAmpliadoParaBusqueda);
+                                        }
+
+                                        // Ajustar radar de tallas tolerando espacios raros de PDF (ej. 36 . 5)
                                         let regexBuscarEnPdfStr = restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+');
                                         regexBuscarEnPdfStr = regexBuscarEnPdfStr.replace(/\\\./g, '\\s*\\.\\s*');
 
@@ -503,7 +541,6 @@
                                         }
                                         let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
 
-                                        // MOTOR DETECTOR DE TALLAS SOBRANTES MEJORADO
                                         const verificarMatch = (textoBusqueda) => {
                                             let match = textoBusqueda.match(regexBuscarEnPdf);
                                             if (match) {
@@ -523,7 +560,7 @@
                                                 if (matchAntes) {
                                                     let idxMatchAntes = matchAntes.index;
                                                     let charBefore = textBefore.substring(Math.max(0, idxMatchAntes - 5), idxMatchAntes).toLowerCase();
-                                                    // Evitar confundir tallas con Q de precios o Páginas
+                                                    // Asegurar no chocar con precios o num de pagina
                                                     if (!charBefore.includes('q') && !charBefore.includes('pag') && !charBefore.includes('pág')) {
                                                         return "sobrante";
                                                     }
@@ -533,22 +570,23 @@
                                             return "nada";
                                         };
 
-                                        let resBusqueda = verificarMatch(bloquePdfParaBusqueda);
+                                        let resBusqueda = verificarMatch(bloqueParaAnalizar);
                                         if (resBusqueda === "ok") {
                                             encontradoEnPdf = true;
                                         } else if (resBusqueda === "sobrante") {
-                                            erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas pegadas a la par que no se eliminaron.`);
+                                            erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas que no se eliminaron.`);
                                             encontradoEnPdf = true;
                                         } else if (/\d/.test(restoLinea)) {
-                                            let resAmp = verificarMatch(bloqueAmpliadoParaBusqueda);
+                                            let resAmp = verificarMatch(bloqueAmpliadoParaAnalizar);
                                             if (resAmp === "ok") {
                                                 encontradoEnPdf = true;
                                             } else if (resAmp === "sobrante") {
-                                                erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas pegadas a la par que no se eliminaron.`);
+                                                erroresEncontrados.push(`${codigo} -> Tallas sobrantes en PDF. Se encontró "${restoLinea}" pero hay otras tallas que no se eliminaron.`);
                                                 encontradoEnPdf = true;
                                             }
                                         }
 
+                                        // ALERTA DE NO COINCIDENCIA ESTRICTA: "35 al 38 debe estar como 35 al 38, no como 35, 36, 37, 38"
                                         if (!encontradoEnPdf) {
                                             let lineaLimpia = linea.replace(/[,:\-\s]+$/, '').trim();
                                             if (lineaLimpia) {
