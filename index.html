@@ -58,16 +58,17 @@
         const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         const normalizarTexto = (texto) => {
-            if (!texto) return "";
-            let t = String(texto).toLowerCase();
-            t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
-            t = t.replace(/\bal\b/g, ' ');
-            t = t.replace(/\by\b/g, ' ');
-            t = t.replace(/,/g, ' ');
-            t = t.replace(/\s+/g, ' ').trim();
-            return t;
-        };
+    if (!texto) return "";
+    let t = String(texto).toLowerCase();
+    t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    t = t.replace(/\r?\n/g, ' |SALTO| ');
+    t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
+    t = t.replace(/\bal\b/g, ' ');
+    t = t.replace(/\by\b/g, ' ');
+    t = t.replace(/,/g, ' ');
+    t = t.replace(/\s+/g, ' ').trim();
+    return t;
+};
 
         const extraerTextoPdf = async (file) => {
     const buffer = await file.arrayBuffer();
@@ -520,10 +521,10 @@
     buscarEscaped = buscarEscaped.replace(/\\\./g, '\\s*\\.\\s*');
     if (tieneColor) buscarEscaped = `(?:\\d{1,3}\\s+)?` + buscarEscaped;
 
-    let regexExacta = new RegExp(buscarEscaped + '\\s*$', 'i');
+    let regexExacta = new RegExp(buscarEscaped + '\\s*(?:\\|SALTO\\||$)', 'i');
     if (regexExacta.test(pdfNorm.trim())) return "ok";
 
-    let regexPresente = new RegExp(buscarEscaped, 'i');
+    let regexPresente = new RegExp(buscarEscaped + '(?!\\s*\\d)', 'i');
     if (regexPresente.test(pdfNorm)) return "sobrante";
 
     return "nada";
