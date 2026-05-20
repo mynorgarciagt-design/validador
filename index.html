@@ -70,23 +70,58 @@
         };
 
         const extraerTextoPdf = async (file) => {
-            const buffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-            let textoCompleto = "";
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                let pageText = "";
-                let lastY = -1;
-                for (let item of textContent.items) {
-                    if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 2) pageText += "\n";
-                    pageText += item.str;
-                    lastY = item.transform[5];
-                }
-                textoCompleto += pageText + "\n";
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    let textoCompleto = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const viewport = page.getViewport({ scale: 1 });
+        const anchoPagina = viewport.width;
+
+        // Detectar si la página tiene dos columnas
+        // Separamos items en columna izquierda y derecha por su X
+        const mitad = anchoPagina / 2;
+        const colIzq = [];
+        const colDer = [];
+
+        for (let item of textContent.items) {
+            const x = item.transform[4];
+            const y = item.transform[5];
+            if (x < mitad) colIzq.push({ x, y, str: item.str });
+            else colDer.push({ x, y, str: item.str });
+        }
+
+        // Procesar cada columna por separado, de arriba hacia abajo (Y descendente)
+        const procesarColumna = (items) => {
+            if (items.length === 0) return "";
+            items.sort((a, b) => b.y - a.y || a.x - b.x);
+            let texto = "";
+            let lastY = -1;
+            for (let item of items) {
+                if (lastY !== -1 && Math.abs(lastY - item.y) > 2) texto += "\n";
+                texto += item.str;
+                lastY = item.y;
             }
-            return { crudo: textoCompleto, normalizado: normalizarTexto(textoCompleto) };
+            return texto;
         };
+
+        const textoIzq = procesarColumna(colIzq);
+        const textoDer = procesarColumna(colDer);
+
+        // Si la columna derecha tiene muy poco contenido, probablemente no hay dos columnas
+        // En ese caso concatenar todo junto sin separar
+        const hayDosColumnas = colDer.length > 5;
+        if (hayDosColumnas) {
+            textoCompleto += textoIzq + "\n" + textoDer + "\n";
+        } else {
+            textoCompleto += textoIzq + "\n";
+        }
+    }
+
+    return { crudo: textoCompleto, normalizado: normalizarTexto(textoCompleto) };
+};
 
         const obtenerPatronColores = () => {
             let colorList = [...COLORES_PREDEFINIDOS];
