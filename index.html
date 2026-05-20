@@ -39,7 +39,6 @@
 
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-        // LISTA DE COLORES ACTUALIZADA Y EXPANDIDA
         const COLORES_PREDEFINIDOS = [
             "negro nubuk", "cafe camel", "vino camel", "negro camel", "tan jeans", "came jeans",
             "lona negro", "negro cromado", "blanco plata", "blanco celeste", "blanco rosado", "azul claro",
@@ -129,17 +128,11 @@
                 for (const sheet of workbook.SheetNames) {
                     let sheetClean = sheet.toLowerCase().trim();
                     let matchEncontrado = false;
-
                     for (const palabra of palabrasClavePdf) {
-                        if (sheetClean.includes(palabra) || palabra.includes(sheetClean)) {
-                            matchEncontrado = true; break;
-                        }
+                        if (sheetClean.includes(palabra) || palabra.includes(sheetClean)) { matchEncontrado = true; break; }
                         const umbral = palabra.length <= 5 ? 1 : 2;
-                        if (distanciaLevenshtein(palabra, sheetClean) <= umbral) {
-                            matchEncontrado = true; break;
-                        }
+                        if (distanciaLevenshtein(palabra, sheetClean) <= umbral) { matchEncontrado = true; break; }
                     }
-
                     if (matchEncontrado) {
                         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheet], {header: 1, defval: ""});
                         if(rows.length > 0) dfList.push(rows);
@@ -151,15 +144,10 @@
                     let fileNameClean = file.name.toLowerCase().replace('.csv', '').replace('.xlsx', '').trim();
                     let matchEncontrado = false;
                     for (const palabra of palabrasClavePdf) {
-                        if (fileNameClean.includes(palabra) || palabra.includes(fileNameClean)) {
-                            matchEncontrado = true; break;
-                        }
+                        if (fileNameClean.includes(palabra) || palabra.includes(fileNameClean)) { matchEncontrado = true; break; }
                         const umbral = palabra.length <= 5 ? 1 : 2;
-                        if (distanciaLevenshtein(palabra, fileNameClean) <= umbral) {
-                            matchEncontrado = true; break;
-                        }
+                        if (distanciaLevenshtein(palabra, fileNameClean) <= umbral) { matchEncontrado = true; break; }
                     }
-
                     if (matchEncontrado) {
                         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {header: 1, defval: ""});
                         if(rows.length > 0) dfList.push(rows);
@@ -191,7 +179,6 @@
 
             const fileInputPdfRef = useRef(null);
             const fileInputChangesRef = useRef(null);
-
             const addLog = (msg) => setLogs(prev => [...prev, msg]);
 
             const handlePdfUpload = (e) => {
@@ -215,15 +202,13 @@
 
             const handleAudit = async () => {
                 if (pdfsData.length === 0 || changesData.length === 0) {
-                    alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV con los cambios.");
-                    return;
+                    alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV con los cambios."); return;
                 }
 
                 setIsProcessing(true); setLogs([]); setReport(null);
                 
                 try {
                     addLog("⚙️ Cargando algoritmos de validación...");
-                    
                     let patronColores = obtenerPatronColores();
                     let patronDinamico = `(?<![\\.,])\\b\\d{1,3}\\s+(?!al\\b|y\\b|con\\b)[a-z]+(?:\\s+(?!al\\b|y\\b|con\\b)[a-z]+)?\\b`;
                     let patronFinalCombinado = patronColores ? `(?:${patronDinamico}|${patronColores})` : patronDinamico;
@@ -241,7 +226,6 @@
 
                     let globalReport = [];
                     let totalAlerts = 0;
-                    
                     const codigosProcesadosGlobal = new Set();
                     const codigosCompletamenteNoEncontrados = new Set();
 
@@ -255,7 +239,6 @@
                         textoPdf = textoPdf.replace(/promocion disponible para pag \w+ \w+/gi, '');
 
                         const dfList = await leerArchivosCambios(changesData, pdfFile.name);
-                        
                         if (dfList.length === 0) {
                             globalReport.push(`\n[ ${pdfFile.name} ]\nNo se encontraron datos para este catálogo en los Excels subidos.`);
                             continue;
@@ -266,15 +249,12 @@
                         for (const rows of dfList) {
                             if (rows.length === 0) continue;
 
-                            let colCodigo = -1;
-                            let colCambio = -1;
-
+                            let colCodigo = -1; let colCambio = -1;
                             for (let c = 0; c < rows[0].length; c++) {
                                 let header = String(rows[0][c] || "").trim().toLowerCase();
                                 if (header === "codigo" || header === "código" || header === "estilo") colCodigo = c;
                                 if (header === "cambio" || header === "cambios" || header === "instruccion" || header === "instrucción") colCambio = c;
                             }
-
                             if (colCodigo === -1) colCodigo = 0;
 
                             for (let r = 1; r < rows.length; r++) {
@@ -288,7 +268,6 @@
 
                                 for (let codigo of codigosSeparados) {
                                     let cambiosCelda = "";
-                                    
                                     if (colCambio !== -1) {
                                         cambiosCelda = String(row[colCambio] || "").trim();
                                     } else {
@@ -310,17 +289,11 @@
                                     let rowKey = codigoNorm + "\x00" + normalizarTexto(cambiosCelda);
                                     let enTodasLasSecciones = cambiosLower.includes('todas las secciones');
 
-                                    if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) {
-                                        continue; 
-                                    }
+                                    if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) { continue; }
 
                                     if (cambiosLower.includes('duplicado')) {
-                                        let count = 0;
-                                        let pos = textoPdf.indexOf(codigoNorm);
-                                        while (pos !== -1) {
-                                            count++;
-                                            pos = textoPdf.indexOf(codigoNorm, pos + 1);
-                                        }
+                                        let count = 0; let pos = textoPdf.indexOf(codigoNorm);
+                                        while (pos !== -1) { count++; pos = textoPdf.indexOf(codigoNorm, pos + 1); }
                                         if (count > 1) {
                                             erroresEncontrados.push(`${codigo} -> Se detectó DUPLICADO en el PDF (aparece ${count} veces)`);
                                         } else if (count === 0) {
@@ -330,11 +303,8 @@
                                                 const datosOtroPdf = pdfCache.get(otroPdf.name);
                                                 if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnOtro = true; break; }
                                             }
-                                            if (!encontradoEnOtro) {
-                                                codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
-                                            }
+                                            if (!encontradoEnOtro) codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
                                         }
-                                        
                                         if (count > 0 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
                                         continue;
                                     }
@@ -366,26 +336,20 @@
                                     const matchPasarA = cambiosLower.match(regexPasarA);
                                     if (matchPasarA) {
                                         const seccionDestino = matchPasarA[1].trim();
-                                        let encontradoEnDestino = false;
-                                        let pdfDestinoSubido = false;
-                                        
+                                        let encontradoEnDestino = false; let pdfDestinoSubido = false;
                                         for (const otroPdf of pdfsData) {
                                             const nombreOtroPdf = otroPdf.name.toLowerCase();
                                             if (nombreOtroPdf.includes(seccionDestino)) {
                                                 pdfDestinoSubido = true;
                                                 const datosOtroPdf = pdfCache.get(otroPdf.name);
-                                                if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) {
-                                                    encontradoEnDestino = true; break;
-                                                }
+                                                if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnDestino = true; break; }
                                             }
                                         }
-                                        
                                         if (!pdfDestinoSubido) erroresEncontrados.push(`${codigo} -> No se pudo validar si se pasó a ${seccionDestino} porque no se detectó el PDF de ${seccionDestino}`);
                                         else if (!encontradoEnDestino) erroresEncontrados.push(`${codigo} -> Se solicitó pasar a '${seccionDestino}' pero NO se encontró en ${seccionDestino}`);
                                         else if (idxCodigo !== -1) erroresEncontrados.push(`${codigo} -> Se pasó a '${seccionDestino}' pero el código AÚN está en este PDF`);
                                         
                                         if (idxCodigo !== -1 && !enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
-                                        
                                         if (cambiosCelda.trim().toLowerCase().match(/^(?:pasar a|mover a|cambiar a|dejar(?:\s+solo)?\s+en\s+secci[oó]n)\s+[a-záéíóúñ]+$/i)) continue;
                                     }
 
@@ -396,32 +360,21 @@
                                             const datosOtroPdf = pdfCache.get(otroPdf.name);
                                             if (datosOtroPdf && datosOtroPdf.normalizado.includes(codigoNorm)) { encontradoEnOtroLado = true; break; }
                                         }
-                                        
-                                        if (!matchPasarA) {
-                                            if (!encontradoEnOtroLado) {
-                                                codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
-                                            }
-                                        }
+                                        if (!matchPasarA && !encontradoEnOtroLado) codigosCompletamenteNoEncontrados.add(`${codigo} -> NO ENCONTRADO`);
                                         continue;
                                     }
 
-                                    if (!enTodasLasSecciones) {
-                                        codigosProcesadosGlobal.add(rowKey);
-                                    }
+                                    if (!enTodasLasSecciones) codigosProcesadosGlobal.add(rowKey);
 
                                     let restoPdf = textoPdf.substring(idxCodigo + codigoNorm.length);
                                     let matchNextCode = restoPdf.match(/\b[a-z]{2,4}\d{3,6}\b/i);
                                     
                                     let blockSize = 300; 
-                                    if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 400) {
-                                        blockSize = codigoNorm.length + matchNextCode.index;
-                                    }
+                                    if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 400) blockSize = codigoNorm.length + matchNextCode.index;
                                     let bloquePdf = textoPdf.substring(idxCodigo, idxCodigo + blockSize);
 
                                     if (cambiosLower.includes('existencias limitadas')) {
-                                        if (!bloquePdf.toLowerCase().includes('existencias limitadas')) {
-                                            erroresEncontrados.push(`${codigo} -> No se encontró el texto "Existencias limitadas" en el PDF`);
-                                        }
+                                        if (!bloquePdf.toLowerCase().includes('existencias limitadas')) erroresEncontrados.push(`${codigo} -> No se encontró el texto "Existencias limitadas" en el PDF`);
                                     }
 
                                     let preciosAdl = [...cambiosCelda.matchAll(/(?:q\.?\s*)(\d+)/gi)].map(m => m[1]);
@@ -431,11 +384,10 @@
                                     }
 
                                     let cambiosCeldaSinPrecio = cambiosCelda.replace(/q\.?\s*\d+/gi, '').trim();
-                                    
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(eliminar|borrar|quitar)\s+(?:el\s+|la\s+|los\s+)?/gi, 'fuera ');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(?:en\s+)?(todas las secciones|secci[oó]n de[^\d]+)/gi, '');
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/\b(precio correcto|se envi[oó] en revisiones|nada que ver.*|error de cat[aá]logo|arreglar el color.*|correjir|corregir|precio|cambiar a|poner|agregar|añadir|incluir|quitar\b(?!\s*de)|tambien|también|ambos colores|color|existencias limitadas|ofertas|marca sophia.*)\b/gi, '').trim();
-                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen/gi, '').trim();
+                                    cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/foto|arreglar|imagen|montaje/gi, '').trim();
                                     cambiosCeldaSinPrecio = cambiosCeldaSinPrecio.replace(/(\d+)([a-zA-ZñÑáéíóúÁÉÍÓÚ]+)/g, '$1 $2');
 
                                     let regexColoresSplit = new RegExp(`(${patronFinalCombinado})`, 'gi');
@@ -443,8 +395,6 @@
 
                                     let lineasCambio = cambiosCeldaSinPrecio.split('\n');
                                     let lineasFaltantes = [];
-
-                                    // Para que corte los colores en el orden correcto
                                     let coloresOrdenados = [...COLORES_PREDEFINIDOS].sort((a, b) => b.length - a.length);
 
                                     for (let linea of lineasCambio) {
@@ -456,9 +406,7 @@
                                             if (lineaSinFuera) {
                                                 let lineaSinFueraEscaped = escapeRegExp(lineaSinFuera);
                                                 let regexBuscarFuera = new RegExp(lineaSinFueraEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+'), 'i');
-                                                if (regexBuscarFuera.test(bloquePdf)) {
-                                                    erroresEncontrados.push(`${codigo} -> Se pidió eliminar '${lineaSinFuera}' pero AÚN aparece en el PDF`);
-                                                }
+                                                if (regexBuscarFuera.test(bloquePdf)) erroresEncontrados.push(`${codigo} -> Se pidió eliminar '${lineaSinFuera}' pero AÚN aparece en el PDF`);
                                             }
                                             continue; 
                                         }
@@ -466,21 +414,15 @@
                                         let regexSoloColor = new RegExp(`^(${patronFinalCombinado})$`, 'i');
                                         let esSoloColor = regexSoloColor.test(lineaNorm);
 
-                                        // NUEVA LÓGICA: IDENTIFICAR EL COLOR Y AISLAR SU BLOQUE
-                                        let tieneColor = false;
-                                        let restoLinea = lineaNorm;
-                                        let colorEncontrado = "";
+                                        let tieneColor = false; let restoLinea = lineaNorm; let colorEncontrado = "";
                                         
                                         for (let c of coloresOrdenados) {
                                             let normColor = normalizarTexto(c);
                                             if (new RegExp(`\\b${escapeRegExp(normColor)}\\b`, 'i').test(lineaNorm)) {
-                                                tieneColor = true;
-                                                colorEncontrado = normColor;
+                                                tieneColor = true; colorEncontrado = normColor;
                                                 let regexCodeColor = new RegExp(`^(\\d{1,3}\\s+)?(${escapeRegExp(normColor)}\\b.*)`, 'i');
                                                 let matchCode = lineaNorm.match(regexCodeColor);
-                                                if (matchCode) {
-                                                    restoLinea = matchCode[2] ? matchCode[2] : lineaNorm;
-                                                }
+                                                if (matchCode) restoLinea = matchCode[2] ? matchCode[2] : lineaNorm;
                                                 break;
                                             }
                                         }
@@ -489,56 +431,49 @@
                                         let encontradoEnPdf = false;
                                         
                                         let maxAmpliado = 600;
-                                        if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 600) {
-                                            maxAmpliado = codigoNorm.length + matchNextCode.index;
-                                        }
+                                        if (matchNextCode && matchNextCode.index > 5 && matchNextCode.index < 600) maxAmpliado = codigoNorm.length + matchNextCode.index;
                                         let bloqueAmpliado = textoPdf.substring(idxCodigo, idxCodigo + maxAmpliado);
                                         
-                                        let bloquePdfParaBusqueda = bloquePdf.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
-                                        let bloqueAmpliadoParaBusqueda = bloqueAmpliado.replace(/\bq\.?\s*(\d+)\b/gi, '$1');
+                                        // FIX VITAL: Ya NO borramos la "Q" de los precios en la memoria del bloque
+                                        let bloquePdfParaBusqueda = bloquePdf;
+                                        let bloqueAmpliadoParaBusqueda = bloqueAmpliado;
 
-                                        // LA MAGIA DE AISLAR: Cortamos el bloque para que contenga SOLO este color
                                         let bloqueParaAnalizar = bloquePdfParaBusqueda;
                                         let bloqueAmpliadoParaAnalizar = bloqueAmpliadoParaBusqueda;
 
+                                        // FIX VITAL: Aislamiento perfecto. Corta ANTES del código de color del vecino.
                                         if (tieneColor && colorEncontrado) {
                                             let aislarBloque = (textoCompleto) => {
-                                                let regexColor = new RegExp(`\\b${escapeRegExp(colorEncontrado)}\\b`, 'i');
+                                                let regexColor = new RegExp(`\\b(?:\\d{1,3}\\s+)?${escapeRegExp(colorEncontrado)}\\b`, 'i');
                                                 let match = textoCompleto.match(regexColor);
                                                 if (match) {
                                                     let startIdx = match.index;
                                                     let nextColorIdx = textoCompleto.length;
-                                                    let restoTexto = textoCompleto.substring(startIdx + colorEncontrado.length);
+                                                    let restoTexto = textoCompleto.substring(startIdx + match[0].length);
+                                                    let offset = startIdx + match[0].length;
                                                     
                                                     for (let c of coloresOrdenados) {
                                                         let normC = normalizarTexto(c);
                                                         if (normC === colorEncontrado) continue;
-                                                        let regexC = new RegExp(`\\b${escapeRegExp(normC)}\\b`, 'i');
+                                                        let regexC = new RegExp(`\\b(?:\\d{1,3}\\s+)?${escapeRegExp(normC)}\\b`, 'i');
                                                         let m = restoTexto.match(regexC);
                                                         if (m) {
-                                                            let absoluteIdx = startIdx + colorEncontrado.length + m.index;
-                                                            if (absoluteIdx < nextColorIdx) {
-                                                                nextColorIdx = absoluteIdx;
-                                                            }
+                                                            let absoluteIdx = offset + m.index;
+                                                            if (absoluteIdx < nextColorIdx) nextColorIdx = absoluteIdx;
                                                         }
                                                     }
-                                                    // Retornar solo el bloque del color
                                                     return textoCompleto.substring(Math.max(0, startIdx - 5), nextColorIdx);
                                                 }
                                                 return textoCompleto;
                                             };
-
                                             bloqueParaAnalizar = aislarBloque(bloquePdfParaBusqueda);
                                             bloqueAmpliadoParaAnalizar = aislarBloque(bloqueAmpliadoParaBusqueda);
                                         }
 
-                                        // Ajustar radar de tallas tolerando espacios raros de PDF (ej. 36 . 5)
                                         let regexBuscarEnPdfStr = restoLineaEscaped.replace(/\\ /g, '[\\s\\/\\,\\-]+');
                                         regexBuscarEnPdfStr = regexBuscarEnPdfStr.replace(/\\\./g, '\\s*\\.\\s*');
 
-                                        if (tieneColor) {
-                                            regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
-                                        }
+                                        if (tieneColor) regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
                                         let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
 
                                         const verificarMatch = (textoBusqueda) => {
@@ -553,15 +488,24 @@
                                                 let regexTallaSobranteAntes = /\b(?:\d{1,2}(?:\.5)?|\d{1,2}\/\d{1,2}|xs|s|m|l|xl|xxl)[\s\/\,\-y]*$/i;
 
                                                 if (regexTallaSobranteDespues.test(textAfter)) {
-                                                    return "sobrante";
+                                                    let esColor = false;
+                                                    let matchColor = textAfter.match(/^[\s\/\,\-y]*\d{1,3}\s+([a-zñ]+)/i);
+                                                    if (matchColor) {
+                                                        let word = normalizarTexto(matchColor[1]);
+                                                        for(let c of coloresOrdenados) {
+                                                            let nc = normalizarTexto(c);
+                                                            if (nc === word || nc.startsWith(word + " ") || word.startsWith(nc)) { esColor = true; break; }
+                                                        }
+                                                    }
+                                                    if (textAfter.toLowerCase().includes("cm")) esColor = true; 
+                                                    if (!esColor) return "sobrante";
                                                 }
                                                 
                                                 let matchAntes = textBefore.match(regexTallaSobranteAntes);
                                                 if (matchAntes) {
                                                     let idxMatchAntes = matchAntes.index;
                                                     let charBefore = textBefore.substring(Math.max(0, idxMatchAntes - 5), idxMatchAntes).toLowerCase();
-                                                    // Asegurar no chocar con precios o num de pagina
-                                                    if (!charBefore.includes('q') && !charBefore.includes('pag') && !charBefore.includes('pág')) {
+                                                    if (!charBefore.includes('q') && !charBefore.includes('pag') && !charBefore.includes('pág') && !charBefore.includes('ref')) {
                                                         return "sobrante";
                                                     }
                                                 }
@@ -586,7 +530,6 @@
                                             }
                                         }
 
-                                        // ALERTA DE NO COINCIDENCIA ESTRICTA: "35 al 38 debe estar como 35 al 38, no como 35, 36, 37, 38"
                                         if (!encontradoEnPdf) {
                                             let lineaLimpia = linea.replace(/[,:\-\s]+$/, '').trim();
                                             if (lineaLimpia) {
@@ -634,8 +577,7 @@
 
             const handleValidarLevantados = async () => {
                 if (pdfsData.length === 0 || changesData.length === 0) {
-                    alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV.");
-                    return;
+                    alert("Por favor, subí al menos un PDF y un archivo de Excel/CSV."); return;
                 }
 
                 setIsProcessing(true); setLogs([]); setReport(null);
@@ -649,9 +591,7 @@
                         try {
                             const data = await extraerTextoPdf(pdfFile);
                             textoGlobalPdfs += data.normalizado + " \n ";
-                        } catch (err) {
-                            addLog(`⚠️ Error leyendo ${pdfFile.name}: ${err.message}`);
-                        }
+                        } catch (err) { addLog(`⚠️ Error leyendo ${pdfFile.name}: ${err.message}`); }
                     }
 
                     addLog("📊 Extrayendo TODOS los códigos de los Excels...");
@@ -671,16 +611,12 @@
                             let colIndex = 0; 
                             for (let c = 0; c < rows[0].length; c++) {
                                 let header = String(rows[0][c] || "").trim().toLowerCase();
-                                if (header === "codigo" || header === "código" || header === "estilo") {
-                                    colIndex = c;
-                                    break;
-                                }
+                                if (header === "codigo" || header === "código" || header === "estilo") { colIndex = c; break; }
                             }
 
                             for (let r = 1; r < rows.length; r++) {
                                 let celda = String(rows[r][colIndex] || "").trim();
                                 if (!celda || /^(nan|c[oó]digo|estilo)$/i.test(celda)) continue;
-                                
                                 let separados = celda.split(/[\/\\]+/).map(c => c.trim()).filter(c => c);
                                 separados.forEach(c => codigosExcel.add(c));
                             }
@@ -693,10 +629,7 @@
                     for (let codigo of codigosExcel) {
                         let codigoNorm = normalizarTexto(codigo);
                         if (!codigoNorm) continue;
-
-                        if (!textoGlobalPdfs.includes(codigoNorm)) {
-                            codigosFaltantes.push(codigo);
-                        }
+                        if (!textoGlobalPdfs.includes(codigoNorm)) codigosFaltantes.push(codigo);
                     }
 
                     let reporteFinal = [];
