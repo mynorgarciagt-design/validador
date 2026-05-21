@@ -525,6 +525,32 @@ if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) { continue; }
     let cambiosLimpio = cambiosCelda.toLowerCase().replace(/todas las secciones/gi, '');
     let buscarNorm = normalizarTexto(restoLinea).replace(/todas las secciones/gi, ''); 
     if (!buscarNorm) return "nada";
+
+                                    const verificarMatch = (textoBusqueda, todasLasLineasDelCambio = []) => {
+    let pdfNorm = normalizarTexto(textoBusqueda);
+    // Limpiamos la frase operativa aquí para que no interfiera con las RegEx de las tallas
+    let cambiosLimpio = cambiosCelda.toLowerCase().replace(/todas las secciones/gi, '');
+    let buscarNorm = normalizarTexto(restoLinea).replace(/todas las secciones/gi, ''); 
+    if (!buscarNorm) return "nada";
+    
+    // 👇 PEGA ESTE BLOQUE EXACTAMENTE AQUÍ 👇
+    console.log("=== AUDITORÍA EN VIVO ===");
+    console.log("Código actual:", codigo);
+    console.log("Lo que pide el ADL:", buscarNorm);
+    console.log("Texto que extrajo del PDF:", pdfNorm);
+    console.log("Líneas hermanas detectadas:", todasLasLineasDelCambio);
+    // 👆 HASTA AQUÍ 👆
+
+    let buscarEscaped = escapeRegExp(buscarNorm).replace(/\\ /g, '[\\s\\/\\,]+');
+    buscarEscaped = buscarEscaped.replace(/\\\./g, '\\s*\\.\\s*');
+    
+    // Si la celda del ADL tiene color, lo exigimos; si no, buscamos solo las tallas
+    if (tieneColor && colorEncontrado) {
+        buscarEscaped = `(?:\\d{1,3}\\s+)?` + buscarEscaped;
+    }
+
+    let regexExacta = new RegExp(buscarEscaped + '\\s*(?:\\|SALTO\\||$)', 'i');
+    if (regexExacta.test(pdfNorm.trim())) return "ok";
     
     // ... El resto de la función verificarMatch se queda EXACTAMENTE igual a como te la pasé en el mensaje anterior ...
 
