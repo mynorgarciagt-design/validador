@@ -57,24 +57,28 @@
 
         const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        const normalizarTexto = (texto) => {
-    if (!texto) return "";
-    let t = String(texto).toLowerCase();
-    t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    t = t.replace(/\r?\n/g, ' |SALTO| ');
-    
-    // Dejamos que "todas las secciones" pase para poder detectarla en el flujo principal
-    t = t.replace(/los dos colores|ambos colores/gi, ' ');
-    t = t.replace(/champange/gi, 'champagne'); 
-    
-    t = t.replace(/(\d+)\s*,\s*(\d+)/g, '$1 $2');
-    t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
-    t = t.replace(/\bal\b/g, ' ');
-    t = t.replace(/\by\b/g, ' ');
-    t = t.replace(/,/g, ' ');
-    t = t.replace(/\s+/g, ' ').trim();
-    return t;
-};
+       const normalizarTexto = (texto) => {
+            if (!texto) return "";
+            let t = String(texto).toLowerCase();
+            t = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            t = t.replace(/\r?\n/g, ' |SALTO| ');
+            
+            // COMA DECIMAL FIX: Si el diseñador o ADL ponen "35,5", lo convertimos a "35.5"
+            t = t.replace(/(\d+),5\b/g, '$1.5');
+            
+            t = t.replace(/los dos colores|ambos colores/gi, ' ');
+            t = t.replace(/champange/gi, 'champagne'); 
+            
+            // Separar comas de listas normales que quedaron (ej. 35,37 -> 35 37)
+            t = t.replace(/(\d+)\s*,\s*(\d+)/g, '$1 $2');
+            
+            t = t.replace(/\s*[\/\-\:]\s*/g, ' ');
+            t = t.replace(/\bal\b/g, ' ');
+            t = t.replace(/\by\b/g, ' ');
+            t = t.replace(/,/g, ' ');
+            t = t.replace(/\s+/g, ' ').trim();
+            return t;
+        };
 
         const extraerTextoPdf = async (file) => {
     const buffer = await file.arrayBuffer();
@@ -519,7 +523,7 @@ if (!enTodasLasSecciones && codigosProcesadosGlobal.has(rowKey)) { continue; }
                                         if (tieneColor) regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
 let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
 
-                                        const verificarMatch = (textoBusqueda, todasLasLineasDelCambio = []) => {
+                                       const verificarMatch = (textoBusqueda, todasLasLineasDelCambio = []) => {
                                             let pdfNorm = normalizarTexto(textoBusqueda);
                                             let buscarNorm = normalizarTexto(restoLinea).replace(/todas las secciones/gi, ''); 
                                             if (!buscarNorm) return "nada";
@@ -540,18 +544,18 @@ let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
                                                 let textoDespues = pdfNorm.substring(matchIndex + buscarNorm.length);
                                                 let lineaRestante = textoDespues.split('|SALTO|')[0];
 
-                                                let todasLasTallas = todasLasLineasDelCambio
-                                                    .map(l => normalizarTexto(l).replace(/[a-z]+/g, '').trim())
-                                                    .join(' ')
-                                                    .split(/\s+/)
-                                                    .filter(t => t.length > 0)
-                                                    .map(t => escapeRegExp(t))
-                                                    .join('|');
+                                                // Extraemos de forma limpia todos los números de 2 dígitos del EXCEL (Tallas permitidas)
+                                                let tallasExcel = (todasLasLineasDelCambio.length > 0 ? todasLasLineasDelCambio : [restoLinea])
+                                                    .map(l => normalizarTexto(l).replace(/[a-z]+/g, ' ').trim().match(/\b\d{2}(?:\.5)?\b/g) || [])
+                                                    .flat();
 
-                                                let filtroSobrantes = todasLasTallas ? `(?!\\s*(?:${todasLasTallas}))` : '';
-                                                let regexTallaExtra = new RegExp(`\\b${filtroSobrantes}\\d{2}(?:\\s*\\.\\s*5)?\\b|\\b(?:s|m|l|xl|p|g|xg)\\b`, 'i');
+                                                // Extraemos todas las tallas numéricas que quedaron en la línea del PDF
+                                                let tallasRestantesPdf = lineaRestante.match(/\b\d{2}(?:\.5)?\b/g) || [];
 
-                                                if (regexTallaExtra.test(lineaRestante)) {
+                                                // Verificamos si en el PDF quedó alguna talla que NO fue autorizada en el Excel
+                                                let tieneSobranteReal = tallasRestantesPdf.some(tallaPdf => !tallasExcel.includes(tallaPdf));
+
+                                                if (tieneSobranteReal) {
                                                     return "sobrante";
                                                 }
                                                 return "ok"; 
