@@ -512,7 +512,7 @@
                                         if (tieneColor) regexBuscarEnPdfStr = `(?:\\d{1,3}\\s+)?` + regexBuscarEnPdfStr;
                                         let regexBuscarEnPdf = new RegExp(regexBuscarEnPdfStr, 'i');
 
-                                        const verificarMatch = (textoBusqueda) => {
+                                       const verificarMatch = (textoBusqueda) => {
     let pdfNorm = normalizarTexto(textoBusqueda);
     let buscarNorm = normalizarTexto(restoLinea);
     if (!buscarNorm) return "nada";
@@ -521,11 +521,24 @@
     buscarEscaped = buscarEscaped.replace(/\\\./g, '\\s*\\.\\s*');
     if (tieneColor) buscarEscaped = `(?:\\d{1,3}\\s+)?` + buscarEscaped;
 
+    // 1. Match Exacto en el renglón aislado
     let regexExacta = new RegExp(buscarEscaped + '\\s*(?:\\|SALTO\\||$)', 'i');
     if (regexExacta.test(pdfNorm.trim())) return "ok";
 
-    let regexPresente = new RegExp(buscarEscaped + '(?!\\s*\\d)', 'i');
-    if (regexPresente.test(pdfNorm)) return "sobrante";
+    // 2. Match Flexible: Tolera precios (Q. 589) o texto, pero caza tallas sobrantes reales
+    let regexTallaExtra = /(?:\s*[\/,-]?\s*\b\d{2}(?:\s*\.\s*5)?\b|\s*[\/,-]?\s*\b(?:s|m|l|xl|p|g|xg)\b)/i;
+    let regexPresente = new RegExp(buscarEscaped, 'i');
+
+    if (regexPresente.test(pdfNorm)) {
+        let matchIndex = pdfNorm.search(regexPresente);
+        let textoDespues = pdfNorm.substring(matchIndex + buscarNorm.length);
+        
+        // Cortamos en el primer |SALTO| para evaluar solo la línea del producto
+        if (regexTallaExtra.test(textoDespues.split('|SALTO|')[0])) {
+            return "sobrante";
+        }
+        return "ok"; 
+    }
 
     return "nada";
 };
